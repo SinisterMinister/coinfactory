@@ -179,14 +179,15 @@ func (om *orderManager) watchOrders(ticker *time.Ticker, interrupt chan os.Signa
 		log.Debug("Updating order statuses")
 		for _, o := range om.openOrders {
 			om.updateOrderStatus(o)
-			om.updateBalancesFromTrades()
 		}
+		om.updateBalancesFromTrades()
 	case <-interrupt:
 		ticker.Stop()
 		return
 	}
 }
 
+// This needs to be rewritten using the trade stream service
 func (om *orderManager) updateBalancesFromTrades() {
 	for _, s := range fetchWatchedSymbols() {
 		req := binance.TradeRequest{Symbol: s}
@@ -198,6 +199,12 @@ func (om *orderManager) updateBalancesFromTrades() {
 		if err != nil {
 			log.WithError(err).Error("Error fetching trades for ", s)
 			continue
+		}
+
+		if _, ok := om.lastSeenTrade[s]; !ok {
+			lastTrade := trades[:len(trades)-1][0]
+			req.FromTradeID = lastTrade.ID
+			return
 		}
 
 		symbol := binance.GetSymbol(s)

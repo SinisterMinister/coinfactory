@@ -182,3 +182,18 @@ func keepaliveUserDataStream(payload ListenKeyPayload) error {
 
 	return err
 }
+
+func deleteUserDataStream(payload ListenKeyPayload) error {
+	u := buildURL("/api/v1/userDataStream")
+	res, err := unsignedDelete(u)
+
+	if err != nil {
+		return err
+	}
+
+	if res.StatusCode >= 400 {
+		return ResponseError{"Error getting user data!", res}
+	}
+
+	return err
+}

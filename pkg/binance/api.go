@@ -77,6 +77,10 @@ func CreateUserDataStream() (ListenKeyPayload, error) {
 	return createUserDataStream()
 }
 
-func KeepaliveUserDataStream(lkp ListenKeyPayload) error {
-	return keepaliveUserDataStream(lkp)
+func KeepaliveUserDataStream(payload ListenKeyPayload) error {
+	return keepaliveUserDataStream(payload)
+}
+
+func DeleteUserDataStream(payload ListenKeyPayload) error {
+	return deleteUserDataStream(payload)
 }

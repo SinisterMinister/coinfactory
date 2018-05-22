@@ -185,6 +185,30 @@ func signedPost(u *url.URL, obj interface{}) (*http.Response, error) {
 	return resp, nil
 }
 
+func unsignedPut(u *url.URL, obj interface{}) (*http.Response, error) {
+	// Build the body
+	payload := structToMap(obj)
+	body := strings.NewReader(payload.Encode())
+	req, err := getRequest("PUT", u, body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+
+	log.WithFields(log.Fields{
+		"url":     req.URL,
+		"payload": payload.Encode(),
+	}).Debug("Sending request to API...")
+
+	resp, err := getHTTPClient().Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
 func signedDelete(u *url.URL) (*http.Response, error) {
 	// Build the URL
 	req, err := getRequest("DELETE", u, nil)

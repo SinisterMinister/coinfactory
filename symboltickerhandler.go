@@ -69,6 +69,7 @@ filterLoop:
 			// Start the processor
 			proc := sts.processorFactory(binance.GetSymbol(s))
 
+			log.Info("Processor for " + s + " is starting")
 			sts.processors[s] = newSymbolStreamProcessorWrapper(proc)
 		}
 	}

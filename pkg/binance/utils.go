@@ -134,6 +134,30 @@ func unsignedGet(u *url.URL) (*http.Response, error) {
 
 }
 
+func unsignedPost(u *url.URL, obj interface{}) (*http.Response, error) {
+	// Build the body
+	payload := structToMap(obj)
+	body := strings.NewReader(payload.Encode())
+	req, err := getRequest("POST", u, body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+
+	log.WithFields(log.Fields{
+		"url":     req.URL,
+		"payload": payload.Encode(),
+	}).Debug("Sending request to API...")
+
+	resp, err := getHTTPClient().Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
 func signedPost(u *url.URL, obj interface{}) (*http.Response, error) {
 	// Build the body
 	payload := structToMap(obj)

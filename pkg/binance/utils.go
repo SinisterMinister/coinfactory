@@ -209,6 +209,25 @@ func unsignedPut(u *url.URL, obj interface{}) (*http.Response, error) {
 	return resp, nil
 }
 
+func unsignedDelete(u *url.URL) (*http.Response, error) {
+	// Build the URL
+	req, err := getRequest("DELETE", u, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	log.WithFields(log.Fields{
+		"url": req.URL,
+	}).Debug("Sending request to API...")
+
+	resp, err := getHTTPClient().Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
 func signedDelete(u *url.URL) (*http.Response, error) {
 	// Build the URL
 	req, err := getRequest("DELETE", u, nil)

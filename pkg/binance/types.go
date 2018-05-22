@@ -235,5 +235,9 @@ type Trade struct {
 	IsBestMatch     bool            `json:"isBestMatch"`
 }
 
+type CreateUserDataStreamResponse struct {
+	ListenKey string `json:"listenKey"`
+}
+
 func (e ResponseError) Error() string            { return e.msg }
 func (e ResponseError) Response() *http.Response { return e.res }

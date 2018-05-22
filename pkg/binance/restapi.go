@@ -150,3 +150,20 @@ func getUserData() (UserDataResponse, error) {
 
 	return response, err
 }
+
+func createUserDataStream() (CreateUserDataStreamResponse, error) {
+	var response CreateUserDataStreamResponse
+	u := buildURL("/api/v1/userDataStream")
+	res, err := unsignedPost(u, nil)
+	if err != nil {
+		return response, err
+	}
+
+	if res.StatusCode >= 400 {
+		return response, ResponseError{"Error getting user data!", res}
+	}
+
+	err = getJSONResponse(res, &response)
+
+	return response, err
+}

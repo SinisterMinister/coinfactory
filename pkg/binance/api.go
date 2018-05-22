@@ -72,3 +72,7 @@ func GetUserData() (UserDataResponse, error) {
 func GetTrades(req TradeRequest) ([]Trade, error) {
 	return getTrades(req)
 }
+
+func CreateUserDataStream() (CreateUserDataStreamResponse, error) {
+	return createUserDataStream()
+}

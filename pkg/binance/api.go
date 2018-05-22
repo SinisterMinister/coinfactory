@@ -73,6 +73,10 @@ func GetTrades(req TradeRequest) ([]Trade, error) {
 	return getTrades(req)
 }
 
-func CreateUserDataStream() (CreateUserDataStreamResponse, error) {
+func CreateUserDataStream() (ListenKeyPayload, error) {
 	return createUserDataStream()
+}
+
+func KeepaliveUserDataStream(lkp ListenKeyPayload) error {
+	return keepaliveUserDataStream(lkp)
 }

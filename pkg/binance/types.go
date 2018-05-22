@@ -235,7 +235,7 @@ type Trade struct {
 	IsBestMatch     bool            `json:"isBestMatch"`
 }
 
-type CreateUserDataStreamResponse struct {
+type ListenKeyPayload struct {
 	ListenKey string `json:"listenKey"`
 }
 

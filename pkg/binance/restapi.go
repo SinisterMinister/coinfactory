@@ -151,8 +151,8 @@ func getUserData() (UserDataResponse, error) {
 	return response, err
 }
 
-func createUserDataStream() (CreateUserDataStreamResponse, error) {
-	var response CreateUserDataStreamResponse
+func createUserDataStream() (ListenKeyPayload, error) {
+	var response ListenKeyPayload
 	u := buildURL("/api/v1/userDataStream")
 	res, err := unsignedPost(u, nil)
 	if err != nil {
@@ -166,4 +166,19 @@ func createUserDataStream() (CreateUserDataStreamResponse, error) {
 	err = getJSONResponse(res, &response)
 
 	return response, err
+}
+
+func keepaliveUserDataStream(payload ListenKeyPayload) error {
+	u := buildURL("/api/v1/userDataStream")
+	res, err := unsignedPut(u, nil)
+
+	if err != nil {
+		return err
+	}
+
+	if res.StatusCode >= 400 {
+		return ResponseError{"Error getting user data!", res}
+	}
+
+	return err
 }

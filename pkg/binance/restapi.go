@@ -117,7 +117,7 @@ func cancelOrder(order OrderCancellationRequest) (OrderCancellationResponse, err
 }
 
 func getTrades(req TradeRequest) ([]Trade, error) {
-	var response []Trade
+	var response = []Trade{}
 	u := buildURL("/api/v3/myTrades")
 	u.RawQuery = structToMap(&req).Encode()
 	res, err := signedGet(u)

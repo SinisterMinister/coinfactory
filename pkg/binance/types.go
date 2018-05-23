@@ -116,9 +116,60 @@ type SymbolTickerData struct {
 	TotalNumberOfTrades  int             `json:"n"`
 }
 
-// GetAllMarketTickersStreamHandler handles incoming data from GetAllMarketTickersStream
-type GetAllMarketTickersStreamHandler interface {
+// AllMarketTickersStreamHandler handles incoming data from GetAllMarketTickersStream
+type AllMarketTickersStreamHandler interface {
 	ReceiveData(payload []SymbolTickerData)
+}
+
+type UserDataStreamHandler interface {
+	ReceiveData(payload UserDataPayload)
+}
+
+type AccountUpdatePayload struct {
+	EventTime            int                   `json:"E"`
+	MakerCommissionRate  decimal.Decimal       `json:"m"`
+	TakerCommisionRate   decimal.Decimal       `json:"t"`
+	BuyerCommissionRate  decimal.Decimal       `json:"b"`
+	SellerCommissionRate decimal.Decimal       `json:"s"`
+	CanTrade             bool                  `json:"T"`
+	CanWithdraw          bool                  `json:"W"`
+	CanDeposit           bool                  `json:"D"`
+	LastUpdate           int                   `json:"u"`
+	Balances             []StreamWalletBalance `json:"B"`
+}
+
+type OrderUpdatePayload struct {
+	EventTime             int             `json:"E"`
+	Symbol                string          `json:"s"`
+	ClientOrderID         string          `json:"c"`
+	Side                  string          `json:"S"`
+	OrderType             string          `json:"o"`
+	TimeInForce           string          `json:"f"`
+	OrderQuantity         decimal.Decimal `json:"q"`
+	OrderPrice            decimal.Decimal `json:"p"`
+	StopPrice             decimal.Decimal `json:"P"`
+	IcebergQuantity       decimal.Decimal `json:"F"`
+	OriginalClientOrderID string          `json:"C"`
+	CurrentExecutionType  string          `json:"x"`
+	CurrentOrderStatus    string          `json:"X"`
+	RejectReason          string          `json:"r"`
+	OrderID               int             `json:"i"`
+	LastExecutedQuantity  decimal.Decimal `json:"l"`
+	FilledQuantity        decimal.Decimal `json:"z"`
+	LastExecutedPrice     decimal.Decimal `json:"L"`
+	CommissionAmmount     decimal.Decimal `json:"n"`
+	CommissionAsset       string          `json:"N"`
+	TransactionTime       int             `json:"T"`
+	TradeID               int             `json:"t"`
+	IsWorking             bool            `json:"w"`
+	IsMaker               bool            `json:"m"`
+}
+
+type UserDataPayload struct {
+	EventType string `json:"e"`
+	EventTime int    `json:"E"`
+	AccountUpdatePayload
+	OrderUpdatePayload
 }
 
 type OrderRequest struct {
@@ -213,6 +264,12 @@ type WalletBalance struct {
 	Asset  string          `json:"asset"`
 	Free   decimal.Decimal `json:"free"`
 	Locked decimal.Decimal `json:"locked"`
+}
+
+type StreamWalletBalance struct {
+	Asset  string          `json:"a"`
+	Free   decimal.Decimal `json:"f"`
+	Locked decimal.Decimal `json:"l"`
 }
 
 type TradeRequest struct {

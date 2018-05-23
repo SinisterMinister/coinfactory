@@ -136,9 +136,20 @@ func unsignedGet(u *url.URL) (*http.Response, error) {
 
 func unsignedPost(u *url.URL, obj interface{}) (*http.Response, error) {
 	// Build the body
-	payload := structToMap(obj)
-	body := strings.NewReader(payload.Encode())
-	req, err := getRequest("POST", u, body)
+	var (
+		req     *http.Request
+		err     error
+		payload url.Values
+	)
+	if obj != nil {
+		payload = structToMap(&obj)
+		body := strings.NewReader(payload.Encode())
+		req, err = getRequest("POST", u, body)
+	} else {
+		payload = url.Values{}
+		req, err = getRequest("POST", u, nil)
+	}
+
 	if err != nil {
 		return nil, err
 	}

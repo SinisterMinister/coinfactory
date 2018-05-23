@@ -4,7 +4,6 @@ import (
 	"os"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/sinisterminister/coinfactory/pkg/binance"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
@@ -14,10 +13,17 @@ const appName = "coinfactory"
 type Coinfactory struct {
 	processorFactory SymbolStreamProcessorFactory
 	stsHandler       *symbolTickerStreamHandler
+	udHandler        *userDataStreamHandler
 }
 
 func (cf *Coinfactory) Start() {
-	cf.startSymbolStreamProcessor()
+	cf.stsHandler.start()
+	cf.udHandler.start()
+}
+
+func (cf *Coinfactory) Stop() {
+	cf.stsHandler.stop()
+	cf.udHandler.stop()
 }
 
 func (cf *Coinfactory) GetBalanceManager() BalanceManager {
@@ -28,21 +34,9 @@ func (cf *Coinfactory) GetOrderManager() OrderManager {
 	return getOrderManagerInstance()
 }
 
-func (cf *Coinfactory) startSymbolStreamProcessor() {
-	handler := cf.stsHandler
-	handler.refreshProcessors()
-
-	viper.OnConfigChange(func(e fsnotify.Event) {
-		log.Info("Config updated. Refreshing processors...")
-		handler.refreshProcessors()
-	})
-
-	binance.GetAllMarketTickersStream(handler)
-}
-
 func NewCoinFactory(ssp SymbolStreamProcessorFactory) Coinfactory {
 	getBalanceManagerInstance()
-	return Coinfactory{ssp, newSymbolTickerStreamHandler(ssp)}
+	return Coinfactory{ssp, newSymbolTickerStreamHandler(ssp), getUserDataStreamHandlerInstance()}
 }
 
 func init() {

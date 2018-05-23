@@ -26,16 +26,12 @@ func openSocket(path string) *websocket.Conn {
 }
 
 // GetAllMarketTickersStream opens a stream that receives all symbol tickers every second.
-func GetAllMarketTickersStream(handler GetAllMarketTickersStreamHandler) {
+func getAllMarketTickersStream(handler AllMarketTickersStreamHandler) chan bool {
 	// Open the websocket
 	conn := openSocket("/ws/!ticker@arr")
 
-	// Close the connection when the function exits
-	defer log.Info("Closing socket connection...")
-	defer conn.Close()
-
 	// Channel used to exit the handler
-	done := make(chan struct{})
+	done := make(chan bool)
 
 	// Intercept the interrupt signal and pass it along
 	interrupt = make(chan os.Signal, 1)
@@ -43,6 +39,10 @@ func GetAllMarketTickersStream(handler GetAllMarketTickersStreamHandler) {
 
 	// Handler closure wrapped in a goroutine
 	go func() {
+		// Close the connection when the function exits
+		defer log.Info("Closing all market tickers socket connection...")
+		defer conn.Close()
+
 		// Close the channel when the goroutine exits
 		defer close(done)
 
@@ -63,15 +63,13 @@ func GetAllMarketTickersStream(handler GetAllMarketTickersStreamHandler) {
 		}
 	}()
 
-	// Codey: Not gonna lie, I don't really understand completely what's going on below. From
-	// what I gather, it's just hanging out and gracefully handling any failures or exits.
-	for {
-		select {
-		case <-done:
-			return
-		case <-interrupt:
-			log.Println("interrupt")
-
+	go func() {
+		for {
+			select {
+			case <-interrupt:
+				log.Println("interrupt")
+			case <-done:
+			}
 			// Cleanly close the connection by sending a close message and then
 			// waiting (with timeout) for the server to close the connection.
 			err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
@@ -85,5 +83,69 @@ func GetAllMarketTickersStream(handler GetAllMarketTickersStreamHandler) {
 			}
 			return
 		}
-	}
+	}()
+
+	return done
+}
+
+func getUserDataStream(listenKey ListenKeyPayload, handler UserDataStreamHandler) chan bool {
+	// Open the websocket
+	conn := openSocket("/ws/" + listenKey.ListenKey)
+
+	// Channel used to exit the handler
+	done := make(chan bool)
+
+	// Intercept the interrupt signal and pass it along
+	interrupt = make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt)
+
+	// Handler closure wrapped in a goroutine
+	go func() {
+		// Close the connection when the function exits
+		defer log.Info("Closing user data socket connection...")
+		defer conn.Close()
+
+		// Close the channel when the goroutine exits
+		defer close(done)
+
+		// Loop forever over the stream
+		for {
+			// Create a container for the data
+			var payload UserDataPayload
+
+			// Read the data and handle any errors
+			err := conn.ReadJSON(&payload)
+			if err != nil {
+				log.Error(err)
+				return
+			}
+
+			// Pass the data to the handler
+			handler.ReceiveData(payload)
+		}
+	}()
+
+	go func() {
+		for {
+			select {
+			case <-interrupt:
+				log.Println("interrupt")
+			case <-done:
+			}
+			// Cleanly close the connection by sending a close message and then
+			// waiting (with timeout) for the server to close the connection.
+			err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+			if err != nil {
+				log.Error(err)
+				return
+			}
+			select {
+			case <-done:
+			case <-time.After(time.Second):
+			}
+			return
+		}
+	}()
+
+	return done
 }

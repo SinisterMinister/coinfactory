@@ -84,3 +84,11 @@ func KeepaliveUserDataStream(payload ListenKeyPayload) error {
 func DeleteUserDataStream(payload ListenKeyPayload) error {
 	return deleteUserDataStream(payload)
 }
+
+func GetAllMarketTickersStream(handler AllMarketTickersStreamHandler) chan bool {
+	return getAllMarketTickersStream(handler)
+}
+
+func GetUserDataStream(listenKey ListenKeyPayload, handler UserDataStreamHandler) chan bool {
+	return getUserDataStream(listenKey, handler)
+}

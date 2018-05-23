@@ -3,6 +3,7 @@ package coinfactory
 import (
 	"strings"
 
+	"github.com/sinisterminister/coinfactory/pkg/binance"
 	"github.com/spf13/viper"
 )
 
@@ -25,4 +26,8 @@ func filterSymbols(symbols []string) []string {
 	}
 
 	return filtered
+}
+
+func fetchWatchedSymbols() []string {
+	return filterSymbols(binance.GetSymbolsAsStrings())
 }

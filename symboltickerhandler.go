@@ -4,8 +4,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/sinisterminister/coinfactory/pkg/binance"
 	log "github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 )
 
 type symbolStreamProcessorWrapper struct {
@@ -14,45 +16,60 @@ type symbolStreamProcessorWrapper struct {
 	quitChannel chan bool
 }
 
-func (pw *symbolStreamProcessorWrapper) kill() {
-	pw.quitChannel <- true
+func (wrapper *symbolStreamProcessorWrapper) kill() {
+	wrapper.quitChannel <- true
 }
 
 // symbolTickerStreamHandler
 type symbolTickerStreamHandler struct {
 	processors       map[string]symbolStreamProcessorWrapper
 	processorFactory SymbolStreamProcessorFactory
-	procInit         sync.Once
 	mux              *sync.Mutex
+	doneChannel      chan bool
 }
 
-// ReceiveData takes the payload from the stream and forwards it to the correct processor
-func (sts *symbolTickerStreamHandler) ReceiveData(payload []binance.SymbolTickerData) {
-	for _, sym := range payload {
-		sts.mux.Lock()
-		if proc, ok := sts.processors[sym.Symbol]; ok {
-			proc.dataChannel <- sym
-		}
-		sts.mux.Unlock()
+func (handler *symbolTickerStreamHandler) start() {
+	handler.refreshProcessors()
+
+	viper.OnConfigChange(func(e fsnotify.Event) {
+		log.Info("Config updated. Refreshing processors...")
+		handler.refreshProcessors()
+	})
+
+	handler.doneChannel = binance.GetAllMarketTickersStream(handler)
+}
+
+func (handler *symbolTickerStreamHandler) stop() {
+	// Kill the handler
+	handler.doneChannel <- true
+
+	for _, p := range handler.processors {
+		p.kill()
 	}
 }
 
-func (sts *symbolTickerStreamHandler) refreshProcessors() {
-	// Initialize the processor map
-	sts.procInit.Do(func() {
-		sts.processors = make(map[string]symbolStreamProcessorWrapper)
-	})
+// ReceiveData takes the payload from the stream and forwards it to the correct processor
+func (handler *symbolTickerStreamHandler) ReceiveData(payload []binance.SymbolTickerData) {
+	for _, sym := range payload {
+		handler.mux.Lock()
+		if proc, ok := handler.processors[sym.Symbol]; ok {
+			proc.dataChannel <- sym
+		}
+		handler.mux.Unlock()
+	}
+}
 
+func (hanlder *symbolTickerStreamHandler) refreshProcessors() {
 	// Fetch eligible symbols
 	symbols := fetchWatchedSymbols()
 
 	// Lock down everything
-	sts.mux.Lock()
-	defer sts.mux.Unlock()
+	hanlder.mux.Lock()
+	defer hanlder.mux.Unlock()
 
 	// Remove any uncalled for processors
 filterLoop:
-	for s, p := range sts.processors {
+	for s, p := range hanlder.processors {
 		for _, sym := range symbols {
 			if strings.Contains(sym, s) {
 				continue filterLoop
@@ -60,23 +77,19 @@ filterLoop:
 		}
 		log.Info("Processor for " + s + " is exiting")
 		p.kill()
-		delete(sts.processors, s)
+		delete(hanlder.processors, s)
 	}
 
 	// Create any missing processors
 	for _, s := range symbols {
-		if _, ok := sts.processors[s]; !ok {
+		if _, ok := hanlder.processors[s]; !ok {
 			// Start the processor
-			proc := sts.processorFactory(binance.GetSymbol(s))
+			proc := hanlder.processorFactory(binance.GetSymbol(s))
 
 			log.Info("Processor for " + s + " is starting")
-			sts.processors[s] = newSymbolStreamProcessorWrapper(proc)
+			hanlder.processors[s] = newSymbolStreamProcessorWrapper(proc)
 		}
 	}
-}
-
-func fetchWatchedSymbols() []string {
-	return filterSymbols(binance.GetSymbolsAsStrings())
 }
 
 func newSymbolStreamProcessorWrapper(processor SymbolStreamProcessor) symbolStreamProcessorWrapper {
@@ -88,25 +101,30 @@ func newSymbolStreamProcessorWrapper(processor SymbolStreamProcessor) symbolStre
 		quitChannel: qc,
 	}
 
+	wrapper.start()
+
+	return wrapper
+}
+
+func (wrapper *symbolStreamProcessorWrapper) start() {
 	// Launch the goroutine
 	go func() {
 		for {
 			select {
-			case data := <-dc:
-				processor.ProcessData(data)
-			case <-qc:
+			case data := <-wrapper.dataChannel:
+				wrapper.processor.ProcessData(data)
+			case <-wrapper.quitChannel:
 				return
 			}
 		}
 	}()
-
-	return wrapper
 }
 
 func newSymbolTickerStreamHandler(factory SymbolStreamProcessorFactory) *symbolTickerStreamHandler {
 	handler := symbolTickerStreamHandler{}
 	handler.processorFactory = factory
 	handler.mux = &sync.Mutex{}
+	handler.processors = make(map[string]symbolStreamProcessorWrapper)
 
 	return &handler
 }

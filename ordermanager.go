@@ -13,6 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// OrderRequest contains the information required to place an order through the API
 type OrderRequest struct {
 	Symbol   string
 	Side     string
@@ -20,6 +21,7 @@ type OrderRequest struct {
 	Price    decimal.Decimal
 }
 
+// Order contains the state of the order
 type Order struct {
 	OrderRequest
 	orderAck    binance.OrderResponseAckResponse
@@ -27,6 +29,7 @@ type Order struct {
 	mux         *sync.Mutex
 }
 
+// GetStatus
 func (o *Order) GetStatus() binance.OrderStatusResponse {
 	o.mux.Lock()
 	defer o.mux.Unlock()

@@ -1,6 +1,9 @@
 package main
 
 import (
+	"os"
+	"os/signal"
+
 	"github.com/sinisterminister/coinfactory"
 	"github.com/sinisterminister/coinfactory/pkg/binance"
 	log "github.com/sirupsen/logrus"
@@ -26,4 +29,13 @@ func processorFactory(symbol binance.Symbol) coinfactory.SymbolStreamProcessor {
 func main() {
 	cf := coinfactory.NewCoinFactory(processorFactory)
 	cf.Start()
+
+	// Intercept the interrupt signal and pass it along
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt)
+
+	select {
+	case <-interrupt:
+		cf.Stop()
+	}
 }

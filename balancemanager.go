@@ -15,6 +15,15 @@ type BalanceManager interface {
 	GetFrozenBalance(asset string) decimal.Decimal
 }
 
+type balanceManagerStreamProcessor struct{}
+
+func (b *balanceManagerStreamProcessor) ProcessUserData(data binance.UserDataPayload) {
+	if data.AccountUpdatePayload.EventTime != 0 {
+		localBalanceManagerInstance.handleUserDataStream(data.AccountUpdatePayload)
+	}
+
+}
+
 type balanceManager struct {
 	wallets map[string]*walletWrapper
 }
@@ -51,6 +60,9 @@ func (bm *balanceManager) init() {
 	if err != nil {
 		log.WithError(err).Fatal("Could not update wallet balances")
 	}
+
+	// Setup user data stream processor to handle balance managing
+	getUserDataStreamHandlerInstance().registerProcessor("coinfactory.balancemanagerprocessor", &balanceManagerStreamProcessor{})
 }
 
 func (bm *balanceManager) GetAvailableBalance(asset string) decimal.Decimal {
@@ -153,4 +165,15 @@ func (bm *balanceManager) getWallet(asset string) *walletWrapper {
 	}
 
 	return w
+}
+
+func (bm *balanceManager) handleUserDataStream(payload binance.AccountUpdatePayload) {
+	// Update the wallet balances
+	for _, sw := range payload.Balances {
+		w := bm.getWallet(sw.Asset)
+		w.mux.Lock()
+		w.Free = sw.Free
+		w.Locked = sw.Locked
+		w.mux.Unlock()
+	}
 }

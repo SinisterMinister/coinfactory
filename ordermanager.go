@@ -183,55 +183,9 @@ func (om *orderManager) watchOrders(ticker *time.Ticker, interrupt chan os.Signa
 		for _, o := range om.openOrders {
 			om.updateOrderStatus(o)
 		}
-		om.updateBalancesFromTrades()
 	case <-interrupt:
 		ticker.Stop()
 		return
-	}
-}
-
-// This needs to be rewritten using the trade stream service
-func (om *orderManager) updateBalancesFromTrades() {
-	for _, s := range fetchWatchedSymbols() {
-		req := binance.TradeRequest{Symbol: s}
-		if last, ok := om.lastSeenTrade[s]; ok {
-			req.FromTradeID = last
-		}
-
-		trades, err := binance.GetTrades(req)
-		if err != nil {
-			log.WithError(err).Error("Error fetching trades for ", s)
-			continue
-		}
-
-		if _, ok := om.lastSeenTrade[s]; !ok {
-			lastTrade := trades[:len(trades)-1][0]
-			req.FromTradeID = lastTrade.ID
-			return
-		}
-
-		symbol := binance.GetSymbol(s)
-
-		for _, t := range trades {
-			// Update balance
-			if t.IsBuyer {
-				// Add purchased coin
-				localBalanceManagerInstance.addFreeAmount(symbol.BaseAsset, t.Quantity)
-
-				// Subtract used coin
-				localBalanceManagerInstance.subtractLockedAmount(symbol.BaseAsset, t.Quantity.Mul(t.Price))
-
-			} else {
-				// Add sold coin
-				localBalanceManagerInstance.subtractLockedAmount(symbol.BaseAsset, t.Quantity)
-
-				// Subtract used coin
-				localBalanceManagerInstance.addFreeAmount(symbol.BaseAsset, t.Quantity.Mul(t.Price))
-			}
-
-			// Subtract commission
-			localBalanceManagerInstance.subtractFreeAmount(t.CommissionAsset, t.Commission)
-		}
 	}
 }
 

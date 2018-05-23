@@ -57,6 +57,7 @@ func getAllMarketTickersStream(handler AllMarketTickersStreamHandler) chan bool 
 			err := conn.ReadJSON(&payload)
 			if err != nil {
 				log.WithError(err).Error(err)
+				return
 			}
 
 			// Pass the data to the handler
@@ -123,6 +124,7 @@ func getUserDataStream(listenKey ListenKeyPayload, handler UserDataStreamHandler
 			log.WithField("raw paylaod", fmt.Sprintf("%s", message)).Debug("Received user data payload")
 			if err := json.Unmarshal(message, &payload); err != nil {
 				log.WithError(err).Error(err)
+				return
 			}
 
 			// Pass the data to the handler

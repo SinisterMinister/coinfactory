@@ -6,7 +6,7 @@ import (
 
 // SymbolStreamProcessor is the interface for stream processors
 type UserDataStreamProcessor interface {
-	ProcessData(data binance.UserDataPayload)
+	ProcessUserData(data binance.UserDataPayload)
 }
 
 type UserDataStreamProcessorFactory func() UserDataStreamProcessor

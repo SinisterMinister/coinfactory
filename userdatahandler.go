@@ -53,9 +53,8 @@ func (handler *userDataStreamHandler) ReceiveData(payload binance.UserDataPayloa
 	}
 }
 
-func (handler *userDataStreamHandler) registerProcessor(name string, factory UserDataStreamProcessorFactory) {
+func (handler *userDataStreamHandler) registerProcessor(name string, proc UserDataStreamProcessor) {
 	if _, ok := handler.processors[name]; !ok {
-		proc := factory()
 		wrapper := newUserDataStreamProcessorWrapper(proc)
 		handler.processors[name] = wrapper
 		return
@@ -82,7 +81,7 @@ func (wrapper *userDataStreamProcessorWrapper) start() {
 		for {
 			select {
 			case data := <-wrapper.dataChannel:
-				wrapper.processor.ProcessData(data)
+				wrapper.processor.ProcessUserData(data)
 			case <-wrapper.quitChannel:
 				return
 			}

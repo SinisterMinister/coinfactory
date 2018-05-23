@@ -9,7 +9,7 @@ import (
 
 func filterSymbols(symbols []string) []string {
 	filter := func(symbol string) bool {
-		sym := viper.GetStringSlice("binance.symbols")
+		sym := viper.GetStringSlice("watchedSymbols")
 		c := 0
 		for _, s := range sym {
 			if strings.Contains(symbol, s) {

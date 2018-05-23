@@ -166,10 +166,27 @@ type OrderUpdatePayload struct {
 }
 
 type UserDataPayload struct {
-	EventType string `json:"e"`
-	EventTime int    `json:"E"`
-	AccountUpdatePayload
-	OrderUpdatePayload
+	AccountUpdatePayload AccountUpdatePayload
+	OrderUpdatePayload   OrderUpdatePayload
+}
+
+func (udp *UserDataPayload) UnmarshalJSON(b []byte) error {
+	var tmp interface{}
+	if err := json.Unmarshal(b, &tmp); err != nil {
+		return err
+	}
+
+	switch t := tmp.(map[string]interface{})["e"]; t {
+	case "outboundAccountInfo":
+		if err := strictTagsUnmarshal(b, &udp.AccountUpdatePayload); err != nil {
+			return err
+		}
+	case "executionReport":
+		if err := strictTagsUnmarshal(b, &udp.OrderUpdatePayload); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type OrderRequest struct {

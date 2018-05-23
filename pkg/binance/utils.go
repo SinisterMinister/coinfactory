@@ -413,3 +413,39 @@ func isEmptyValue(v reflect.Value) bool {
 	}
 	return false
 }
+
+func strictTagsUnmarshal(b []byte, i interface{}) error {
+	var tmp interface{}
+
+	// Unmarshal the json into something we can use
+	if err := json.Unmarshal(b, &tmp); err != nil {
+		return err
+	}
+
+	// Grab all the root level tags
+	tags := map[string]bool{}
+	iVal := reflect.ValueOf(i).Elem()
+	typ := iVal.Type()
+	for i := 0; i < iVal.NumField(); i++ {
+		tag := typ.Field(i).Tag.Get("json")
+		if tag != "" {
+			tag, _ := parseTag(tag)
+			tags[tag] = true
+		}
+	}
+
+	// Remove any fields without a matching tag
+	for k := range tmp.(map[string]interface{}) {
+		if _, ok := tags[k]; !ok {
+			// Remove unneeded value
+			delete(tmp.(map[string]interface{}), k)
+		}
+	}
+
+	// Unmarshal data
+	filtered, err := json.Marshal(tmp.(map[string]interface{}))
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(filtered, i)
+}

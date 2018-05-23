@@ -1,6 +1,8 @@
 package binance
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/url"
 	"os"
 	"os/signal"
@@ -54,8 +56,7 @@ func getAllMarketTickersStream(handler AllMarketTickersStreamHandler) chan bool 
 			// Read the data and handle any errors
 			err := conn.ReadJSON(&payload)
 			if err != nil {
-				log.Error(err)
-				return
+				log.WithError(err).Error(err)
 			}
 
 			// Pass the data to the handler
@@ -74,7 +75,7 @@ func getAllMarketTickersStream(handler AllMarketTickersStreamHandler) chan bool 
 			// waiting (with timeout) for the server to close the connection.
 			err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 			if err != nil {
-				log.Error(err)
+				log.WithError(err).Error(err)
 				return
 			}
 			select {
@@ -114,10 +115,14 @@ func getUserDataStream(listenKey ListenKeyPayload, handler UserDataStreamHandler
 			var payload UserDataPayload
 
 			// Read the data and handle any errors
-			err := conn.ReadJSON(&payload)
+			_, message, err := conn.ReadMessage()
 			if err != nil {
-				log.Error(err)
-				return
+				log.WithError(err).Error(err)
+			}
+
+			log.WithField("raw paylaod", fmt.Sprintf("%s", message)).Debug("Received user data payload")
+			if err := json.Unmarshal(message, &payload); err != nil {
+				log.WithError(err).Error(err)
 			}
 
 			// Pass the data to the handler

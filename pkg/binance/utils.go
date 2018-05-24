@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
 	"reflect"
 	"strconv"
@@ -28,7 +27,7 @@ func getRequest(method string, u *url.URL, obj interface{}) (*http.Request, erro
 		err error
 	)
 	if obj != nil {
-		payload := structToMap(&obj)
+		payload := structToMap(obj)
 		body := strings.NewReader(payload.Encode())
 		req, err = http.NewRequest(method, u.String(), body)
 	} else {
@@ -195,11 +194,11 @@ func signedDelete(u *url.URL) (*http.Response, error) {
 }
 
 func sendRequest(req *http.Request) (*http.Response, error) {
-	rawRequest, _ := httputil.DumpRequest(req, true)
+	// rawRequest, _ := httputil.DumpRequest(req, true)
 
-	log.WithFields(log.Fields{
-		"request": rawRequest,
-	}).Debug("Sending request to API...")
+	// log.WithFields(log.Fields{
+	// 	"request": rawRequest,
+	// }).Debug("Sending request to API...")
 
 	resp, err := getHTTPClient().Do(req)
 	if err != nil {
@@ -253,8 +252,9 @@ func getJSONResponse(response *http.Response, obj interface{}) error {
 }
 func structToMap(i interface{}) (values url.Values) {
 	values = url.Values{}
-	iVal := reflect.ValueOf(i).Elem()
+	iVal := reflect.ValueOf(i)
 	typ := iVal.Type()
+	log.Info(iVal, iVal.Kind())
 	for i := 0; i < iVal.NumField(); i++ {
 		f := iVal.Field(i)
 		// You ca use tags here...

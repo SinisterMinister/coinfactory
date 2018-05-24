@@ -32,7 +32,7 @@ func getExchangeInfo() (ExchangeInfo, error) {
 
 func placeTestOrder(order OrderRequest) error {
 	u := buildURL("/api/v3/order/test")
-	res, err := signedPost(u, &order)
+	res, err := signedPost(u, order)
 	if err != nil {
 		return err
 	}
@@ -55,7 +55,7 @@ func placeTestOrder(order OrderRequest) error {
 
 func placeOrder(order OrderRequest, response interface{}) error {
 	u := buildURL("/api/v3/order")
-	res, err := signedPost(u, &order)
+	res, err := signedPost(u, order)
 	if err != nil {
 		return err
 	}
@@ -81,7 +81,7 @@ func getOrderStatus(order OrderStatusRequest) (OrderStatusResponse, error) {
 	var response OrderStatusResponse
 	u := buildURL("/api/v3/order")
 	// Add payload
-	u.RawQuery = structToMap(&order).Encode()
+	u.RawQuery = structToMap(order).Encode()
 	res, err := signedGet(u)
 	if err != nil {
 		return response, err

@@ -23,15 +23,17 @@ import (
 )
 
 func getRequest(method string, u *url.URL, obj interface{}) (*http.Request, error) {
-	var body *strings.Reader
+	var (
+		req *http.Request
+		err error
+	)
 	if obj != nil {
 		payload := structToMap(&obj)
-		body = strings.NewReader(payload.Encode())
-
+		body := strings.NewReader(payload.Encode())
+		req, err = http.NewRequest(method, u.String(), body)
 	} else {
-		body = nil
+		req, err = http.NewRequest(method, u.String(), nil)
 	}
-	req, err := http.NewRequest(method, u.String(), body)
 	if err != nil {
 		return nil, err
 	}

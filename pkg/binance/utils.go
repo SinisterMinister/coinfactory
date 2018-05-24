@@ -7,9 +7,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"reflect"
 	"strconv"
@@ -22,7 +22,15 @@ import (
 	"github.com/spf13/viper"
 )
 
-func getRequest(method string, u *url.URL, body io.Reader) (*http.Request, error) {
+func getRequest(method string, u *url.URL, obj interface{}) (*http.Request, error) {
+	var body *strings.Reader
+	if obj != nil {
+		payload := structToMap(&obj)
+		body = strings.NewReader(payload.Encode())
+
+	} else {
+		body = nil
+	}
 	req, err := http.NewRequest(method, u.String(), body)
 	if err != nil {
 		return nil, err
@@ -102,16 +110,8 @@ func signedGet(u *url.URL) (*http.Response, error) {
 	// Sign the request
 	signRequest(req)
 
-	log.WithFields(log.Fields{
-		"req": req,
-	}).Debug("Sending request to API...")
-
-	resp, err := getHTTPClient().Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	return resp, nil
+	// Send the request and return the response
+	return sendRequest(req)
 }
 
 func unsignedGet(u *url.URL) (*http.Response, error) {
@@ -121,59 +121,25 @@ func unsignedGet(u *url.URL) (*http.Response, error) {
 		return nil, err
 	}
 
-	log.WithFields(log.Fields{
-		"req": req,
-	}).Debug("Sending request to API...")
-
-	resp, err := getHTTPClient().Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	return resp, nil
-
+	// Send the request and return the response
+	return sendRequest(req)
 }
 
 func unsignedPost(u *url.URL, obj interface{}) (*http.Response, error) {
-	// Build the body
-	var (
-		req     *http.Request
-		err     error
-		payload url.Values
-	)
-	if obj != nil {
-		payload = structToMap(&obj)
-		body := strings.NewReader(payload.Encode())
-		req, err = getRequest("POST", u, body)
-	} else {
-		payload = url.Values{}
-		req, err = getRequest("POST", u, nil)
-	}
-
+	req, err := getRequest("POST", u, obj)
 	if err != nil {
 		return nil, err
 	}
 
+	// Add the proper content type
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
-	log.WithFields(log.Fields{
-		"url":     req.URL,
-		"payload": payload.Encode(),
-	}).Debug("Sending request to API...")
-
-	resp, err := getHTTPClient().Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	return resp, nil
+	// Send the request and return the response
+	return sendRequest(req)
 }
 
 func signedPost(u *url.URL, obj interface{}) (*http.Response, error) {
-	// Build the body
-	payload := structToMap(obj)
-	body := strings.NewReader(payload.Encode())
-	req, err := getRequest("POST", u, body)
+	req, err := getRequest("POST", u, obj)
 	if err != nil {
 		return nil, err
 	}
@@ -181,43 +147,24 @@ func signedPost(u *url.URL, obj interface{}) (*http.Response, error) {
 	// Sign the request
 	signRequest(req)
 
+	// Add the proper content type
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
-	log.WithFields(log.Fields{
-		"url":     req.URL,
-		"payload": payload.Encode(),
-	}).Debug("Sending request to API...")
-
-	resp, err := getHTTPClient().Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	return resp, nil
+	// Send the request and return the response
+	return sendRequest(req)
 }
 
 func unsignedPut(u *url.URL, obj interface{}) (*http.Response, error) {
-	// Build the body
-	payload := structToMap(&obj)
-	body := strings.NewReader(payload.Encode())
-	req, err := getRequest("PUT", u, body)
+	req, err := getRequest("PUT", u, obj)
 	if err != nil {
 		return nil, err
 	}
 
+	// Add the proper content type
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
-	log.WithFields(log.Fields{
-		"url":     req.URL,
-		"payload": payload.Encode(),
-	}).Debug("Sending request to API...")
-
-	resp, err := getHTTPClient().Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	return resp, nil
+	// Send the request and return the response
+	return sendRequest(req)
 }
 
 func unsignedDelete(u *url.URL) (*http.Response, error) {
@@ -227,16 +174,8 @@ func unsignedDelete(u *url.URL) (*http.Response, error) {
 		return nil, err
 	}
 
-	log.WithFields(log.Fields{
-		"url": req.URL,
-	}).Debug("Sending request to API...")
-
-	resp, err := getHTTPClient().Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	return resp, nil
+	// Send the request and return the response
+	return sendRequest(req)
 }
 
 func signedDelete(u *url.URL) (*http.Response, error) {
@@ -249,8 +188,15 @@ func signedDelete(u *url.URL) (*http.Response, error) {
 	// Sign the request
 	signRequest(req)
 
+	// Send the request and return the response
+	return sendRequest(req)
+}
+
+func sendRequest(req *http.Request) (*http.Response, error) {
+	rawRequest, _ := httputil.DumpRequest(req, true)
+
 	log.WithFields(log.Fields{
-		"url": req.URL,
+		"request": rawRequest,
 	}).Debug("Sending request to API...")
 
 	resp, err := getHTTPClient().Do(req)

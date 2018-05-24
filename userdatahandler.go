@@ -34,6 +34,7 @@ func (handler *userDataStreamHandler) start() {
 		log.WithError(err).Fatal("Could not create user data stream")
 	}
 	handler.streamDoneChannel = binance.GetUserDataStream(listenKey, handler)
+	handler.keepaliveDoneChannel = make(chan bool)
 
 	ticker := time.NewTicker(time.Duration(20) * time.Minute)
 
@@ -44,13 +45,13 @@ func (handler *userDataStreamHandler) start() {
 		case <-done:
 			return
 		}
-	}(handler.streamDoneChannel, listenKey)
+	}(handler.keepaliveDoneChannel, listenKey)
 }
 
 func (handler *userDataStreamHandler) stop() {
 	// Kill the handler
-	handler.streamDoneChannel <- true
 	handler.keepaliveDoneChannel <- true
+	handler.streamDoneChannel <- true
 
 	for _, p := range handler.processors {
 		p.kill()

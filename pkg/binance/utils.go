@@ -198,7 +198,7 @@ func signedPost(u *url.URL, obj interface{}) (*http.Response, error) {
 
 func unsignedPut(u *url.URL, obj interface{}) (*http.Response, error) {
 	// Build the body
-	payload := structToMap(obj)
+	payload := structToMap(&obj)
 	body := strings.NewReader(payload.Encode())
 	req, err := getRequest("PUT", u, body)
 	if err != nil {

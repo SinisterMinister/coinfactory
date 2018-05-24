@@ -100,7 +100,7 @@ func getOrderStatus(order OrderStatusRequest) (OrderStatusResponse, error) {
 func cancelOrder(order OrderCancellationRequest) (OrderCancellationResponse, error) {
 	var response OrderCancellationResponse
 	u := buildURL("/api/v3/order")
-	u.RawQuery = structToMap(&order).Encode()
+	u.RawQuery = structToMap(order).Encode()
 
 	res, err := signedDelete(u)
 	if err != nil {

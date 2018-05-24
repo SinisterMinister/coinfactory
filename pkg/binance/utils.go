@@ -254,7 +254,6 @@ func structToMap(i interface{}) (values url.Values) {
 	values = url.Values{}
 	iVal := reflect.ValueOf(i)
 	typ := iVal.Type()
-	log.Info(iVal, iVal.Kind())
 	for i := 0; i < iVal.NumField(); i++ {
 		f := iVal.Field(i)
 		// You ca use tags here...

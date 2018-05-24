@@ -2,6 +2,7 @@ package coinfactory
 
 import (
 	"sync"
+	"time"
 
 	"github.com/sinisterminister/coinfactory/pkg/binance"
 	log "github.com/sirupsen/logrus"
@@ -17,11 +18,11 @@ func (wrapper *userDataStreamProcessorWrapper) kill() {
 	wrapper.quitChannel <- true
 }
 
-// symbolTickerStreamHandler
 type userDataStreamHandler struct {
-	processors  map[string]userDataStreamProcessorWrapper
-	mux         *sync.Mutex
-	doneChannel chan bool
+	processors           map[string]userDataStreamProcessorWrapper
+	mux                  *sync.Mutex
+	streamDoneChannel    chan bool
+	keepaliveDoneChannel chan bool
 }
 
 var udshOnce = sync.Once{}
@@ -32,12 +33,24 @@ func (handler *userDataStreamHandler) start() {
 	if err != nil {
 		log.WithError(err).Fatal("Could not create user data stream")
 	}
-	handler.doneChannel = binance.GetUserDataStream(listenKey, handler)
+	handler.streamDoneChannel = binance.GetUserDataStream(listenKey, handler)
+
+	ticker := time.NewTicker(time.Duration(20) * time.Minute)
+
+	go func(done chan bool, listenKey binance.ListenKeyPayload) {
+		select {
+		case <-ticker.C:
+			binance.KeepaliveUserDataStream(listenKey)
+		case <-done:
+			return
+		}
+	}(handler.streamDoneChannel, listenKey)
 }
 
 func (handler *userDataStreamHandler) stop() {
 	// Kill the handler
-	handler.doneChannel <- true
+	handler.streamDoneChannel <- true
+	handler.keepaliveDoneChannel <- true
 
 	for _, p := range handler.processors {
 		p.kill()

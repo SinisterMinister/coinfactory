@@ -16,13 +16,13 @@ import (
 func openSocket(path string) *websocket.Conn {
 	// TODO: Fix this naive impl with something robust that can handle connection drops
 	u := url.URL{Scheme: "wss", Host: viper.GetString("binance.stream_host") + ":" + viper.GetString("binance.stream_port"), Path: path}
-	log.Info("Opening socket connection to ", u.String())
+	log.Debug("Opening socket connection to ", u.String())
 
 	connection, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
 		log.Fatal("dial:", err)
 	}
-	log.Info("Connection to ", u.String(), " established!")
+	log.Debug("Connection to ", u.String(), " established!")
 
 	return connection
 }
@@ -38,7 +38,7 @@ func getAllMarketTickersStream(handler AllMarketTickersStreamHandler) chan bool 
 	// Handler closure wrapped in a goroutine
 	go func() {
 		// Close the connection when the function exits
-		defer log.Info("Closing all market tickers socket connection...")
+		defer log.Debug("Closing all market tickers socket connection...")
 		defer conn.Close()
 
 		// Close the channel when the goroutine exits

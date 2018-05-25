@@ -29,6 +29,7 @@ var udshOnce = sync.Once{}
 var usdhInstance *userDataStreamHandler
 
 func (handler *userDataStreamHandler) start() {
+	log.Info("Starting user data stream handler")
 	listenKey, err := binance.CreateUserDataStream()
 	if err != nil {
 		log.WithError(err).Fatal("Could not create user data stream")
@@ -38,6 +39,8 @@ func (handler *userDataStreamHandler) start() {
 
 	go func(done chan bool, listenKey binance.ListenKeyPayload) {
 		ticker := time.NewTicker(time.Duration(20) * time.Minute)
+
+		log.Info("User data stream handler started successfully")
 
 		for {
 			select {
@@ -51,6 +54,8 @@ func (handler *userDataStreamHandler) start() {
 }
 
 func (handler *userDataStreamHandler) stop() {
+	log.Warn("Stopping user data stream handler")
+	defer log.Warn("User data stream handler stopped")
 	// Kill the handler
 	handler.keepaliveDoneChannel <- true
 	handler.streamDoneChannel <- true

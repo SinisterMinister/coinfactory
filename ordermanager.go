@@ -193,6 +193,8 @@ func (om *orderManager) startOrderWatcher() {
 				}
 			case <-interrupt:
 				ticker.Stop()
+				log.Warn("Stopping order watcher")
+				defer log.Warn("Order watcher stopped")
 				return
 			}
 		}

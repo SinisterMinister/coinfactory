@@ -29,10 +29,12 @@ type symbolTickerStreamHandler struct {
 }
 
 func (handler *symbolTickerStreamHandler) start() {
+	log.Info("Starting symbol ticker stream handler")
+	defer log.Info("Symbol ticker stream handler started successfully")
 	handler.refreshProcessors()
 
 	viper.OnConfigChange(func(e fsnotify.Event) {
-		log.Info("Config updated. Refreshing processors...")
+		log.Info("Config updated. Refreshing processors")
 		handler.refreshProcessors()
 	})
 
@@ -40,6 +42,8 @@ func (handler *symbolTickerStreamHandler) start() {
 }
 
 func (handler *symbolTickerStreamHandler) stop() {
+	log.Warn("Stopping user data stream handler")
+	defer log.Warn("User data stream handler stopped")
 	// Kill the handler
 	handler.doneChannel <- true
 

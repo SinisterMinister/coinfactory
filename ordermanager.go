@@ -24,9 +24,10 @@ type OrderRequest struct {
 // Order contains the state of the order
 type Order struct {
 	OrderRequest
-	orderAck    binance.OrderResponseAckResponse
-	orderStatus binance.OrderStatusResponse
-	mux         *sync.Mutex
+	orderAck          binance.OrderResponseAckResponse
+	orderStatus       binance.OrderStatusResponse
+	orderCreationTime time.Time
+	mux               *sync.Mutex
 }
 
 // GetStatus
@@ -34,6 +35,13 @@ func (o *Order) GetStatus() binance.OrderStatusResponse {
 	o.mux.Lock()
 	defer o.mux.Unlock()
 	return o.orderStatus
+}
+
+// GetAge returns the age of the order
+func (o *Order) GetAge() time.Duration {
+	o.mux.Lock()
+	defer o.mux.Unlock()
+	return time.Since(o.orderCreationTime)
 }
 
 type OrderLogger interface {
@@ -165,6 +173,7 @@ func orderBuilder(req OrderRequest, ack binance.OrderResponseAckResponse) *Order
 		req,
 		ack,
 		binance.OrderStatusResponse{},
+		time.Now(),
 		&sync.Mutex{},
 	}
 }
@@ -219,7 +228,9 @@ func (om *orderManager) updateOrderStatus(order *Order) {
 	case "REJECTED":
 		fallthrough
 	case "EXPIRED":
+		om.openOrdersMux.Lock()
 		delete(om.openOrders, order.orderAck.OrderID)
+		om.openOrdersMux.Unlock()
 	}
 	order.orderStatus = res
 	order.mux.Unlock()

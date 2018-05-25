@@ -35,26 +35,26 @@ func startExchangeInfoFetcher() {
 		log.Fatal("Could not fetch exchange info! ", err)
 	}
 	refreshFromInfo(info)
-
-	// Start a ticker for polling
-	ticker := time.NewTicker(time.Minute)
-
-	// Intercept the interrupt signal and pass it along
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt)
-
 	go func() {
-		select {
-		case <-ticker.C:
-			info, err := getExchangeInfo()
-			if err != nil {
-				log.Error("Could not fetch exchange info! ", err)
-			}
+		// Start a ticker for polling
+		ticker := time.NewTicker(time.Minute)
 
-			refreshFromInfo(info)
-		case <-interrupt:
-			ticker.Stop()
-			return
+		// Intercept the interrupt signal and pass it along
+		interrupt := make(chan os.Signal, 1)
+		signal.Notify(interrupt, os.Interrupt)
+		for {
+			select {
+			case <-ticker.C:
+				info, err := getExchangeInfo()
+				if err != nil {
+					log.Error("Could not fetch exchange info! ", err)
+				}
+
+				refreshFromInfo(info)
+			case <-interrupt:
+				ticker.Stop()
+				return
+			}
 		}
 	}()
 }

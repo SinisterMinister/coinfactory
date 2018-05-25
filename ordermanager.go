@@ -51,6 +51,7 @@ type orderManager struct {
 	openOrders    map[int]*Order
 	lastSeenTrade map[string]int
 	orderLogger   OrderLogger
+	openOrdersMux *sync.Mutex
 }
 
 var instance OrderManager
@@ -61,6 +62,7 @@ func getOrderManagerInstance() OrderManager {
 		i := &orderManager{
 			openOrders:    map[int]*Order{},
 			lastSeenTrade: map[string]int{},
+			openOrdersMux: &sync.Mutex{},
 		}
 		i.startOrderWatcher()
 		instance = i
@@ -103,6 +105,8 @@ func (om *orderManager) AttemptOrder(order OrderRequest) (*Order, error) {
 		log.WithError(err).Debug("Order attempt failed!")
 		return nil, err
 	}
+	om.openOrdersMux.Lock()
+	defer om.openOrdersMux.Unlock()
 	om.openOrders[res.OrderID] = orderBuilder(order, res)
 
 	return om.openOrders[res.OrderID], nil
@@ -166,27 +170,33 @@ func orderBuilder(req OrderRequest, ack binance.OrderResponseAckResponse) *Order
 }
 
 func (om *orderManager) startOrderWatcher() {
-	// Start a ticker for polling
-	ticker := time.NewTicker(time.Duration(viper.GetInt("orderUpdateInterval")) * time.Second)
+	go func() {
+		// Start a ticker for polling
+		ticker := time.NewTicker(time.Duration(viper.GetInt("orderUpdateInterval")) * time.Second)
 
-	// Intercept the interrupt signal and pass it along
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt)
+		// Intercept the interrupt signal and pass it along
+		interrupt := make(chan os.Signal, 1)
+		signal.Notify(interrupt, os.Interrupt)
 
-	go om.watchOrders(ticker, interrupt)
-}
-
-func (om *orderManager) watchOrders(ticker *time.Ticker, interrupt chan os.Signal) {
-	select {
-	case <-ticker.C:
-		log.Debug("Updating order statuses")
-		for _, o := range om.openOrders {
-			om.updateOrderStatus(o)
+		for {
+			select {
+			case <-ticker.C:
+				log.Info("Updating order statuses")
+				om.openOrdersMux.Lock()
+				cp := make(map[int]*Order)
+				for k, v := range om.openOrders {
+					cp[k] = v
+				}
+				om.openOrdersMux.Unlock()
+				for _, o := range cp {
+					om.updateOrderStatus(o)
+				}
+			case <-interrupt:
+				ticker.Stop()
+				return
+			}
 		}
-	case <-interrupt:
-		ticker.Stop()
-		return
-	}
+	}()
 }
 
 func (om *orderManager) updateOrderStatus(order *Order) {

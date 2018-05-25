@@ -35,10 +35,6 @@ func getAllMarketTickersStream(handler AllMarketTickersStreamHandler) chan bool 
 	// Channel used to exit the handler
 	done := make(chan bool)
 
-	// Intercept the interrupt signal and pass it along
-	interrupt = make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt)
-
 	// Handler closure wrapped in a goroutine
 	go func() {
 		// Close the connection when the function exits
@@ -66,6 +62,10 @@ func getAllMarketTickersStream(handler AllMarketTickersStreamHandler) chan bool 
 	}()
 
 	go func() {
+		// Intercept the interrupt signal and pass it along
+		interrupt := make(chan os.Signal, 1)
+		signal.Notify(interrupt, os.Interrupt)
+
 		for {
 			select {
 			case <-interrupt:
@@ -97,12 +97,9 @@ func getUserDataStream(listenKey ListenKeyPayload, handler UserDataStreamHandler
 	// Channel used to exit the handler
 	done := make(chan bool)
 
-	// Intercept the interrupt signal and pass it along
-	interrupt = make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt)
-
 	// Handler closure wrapped in a goroutine
 	go func() {
+
 		// Close the connection when the function exits
 		defer log.Info("Closing user data socket connection...")
 		defer conn.Close()
@@ -133,6 +130,10 @@ func getUserDataStream(listenKey ListenKeyPayload, handler UserDataStreamHandler
 	}()
 
 	go func() {
+		// Intercept the interrupt signal and pass it along
+		interrupt := make(chan os.Signal, 1)
+		signal.Notify(interrupt, os.Interrupt)
+
 		for {
 			select {
 			case <-interrupt:

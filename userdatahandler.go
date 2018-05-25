@@ -36,14 +36,16 @@ func (handler *userDataStreamHandler) start() {
 	handler.streamDoneChannel = binance.GetUserDataStream(listenKey, handler)
 	handler.keepaliveDoneChannel = make(chan bool)
 
-	ticker := time.NewTicker(time.Duration(20) * time.Minute)
-
 	go func(done chan bool, listenKey binance.ListenKeyPayload) {
-		select {
-		case <-ticker.C:
-			binance.KeepaliveUserDataStream(listenKey)
-		case <-done:
-			return
+		ticker := time.NewTicker(time.Duration(20) * time.Minute)
+
+		for {
+			select {
+			case <-ticker.C:
+				binance.KeepaliveUserDataStream(listenKey)
+			case <-done:
+				return
+			}
 		}
 	}(handler.keepaliveDoneChannel, listenKey)
 }

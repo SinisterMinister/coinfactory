@@ -17,8 +17,8 @@ type Coinfactory struct {
 }
 
 func (cf *Coinfactory) Start() {
-	cf.stsHandler.start()
-	cf.udHandler.start()
+	go cf.stsHandler.start()
+	go cf.udHandler.start()
 }
 
 func (cf *Coinfactory) Stop() {

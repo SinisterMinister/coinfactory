@@ -1,8 +1,6 @@
 package coinfactory
 
 import (
-	"os"
-
 	"github.com/fsnotify/fsnotify"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -40,9 +38,6 @@ func NewCoinFactory(ssp SymbolStreamProcessorFactory) Coinfactory {
 }
 
 func init() {
-	// Tell AWS to use the credentials file for region
-	os.Setenv("AWS_SDK_LOAD_CONFIG", "true")
-
 	// Setup the paths where Viper will search for the config file
 	viper.SetConfigName("." + appName)
 	viper.AddConfigPath("/etc/" + appName)

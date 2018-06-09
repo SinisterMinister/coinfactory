@@ -197,3 +197,21 @@ func deleteUserDataStream(payload ListenKeyPayload) error {
 
 	return err
 }
+
+func getKlines(req KlineRequest) ([]Kline, error) {
+	var response []Kline
+	u := buildURL("/api/v1/klines")
+	u.RawQuery = structToMap(req).Encode()
+	res, err := unsignedGet(u)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if res.StatusCode >= 400 {
+		return nil, ResponseError{"Error getting kline data!", res}
+	}
+
+	err = getJSONResponse(res, &response)
+	return response, err
+}

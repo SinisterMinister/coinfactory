@@ -3,6 +3,7 @@ package binance
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/shopspring/decimal"
 )
@@ -260,11 +261,6 @@ type OrderCancellationResponse struct {
 	ClientOrderID         string `json:"clientOrderId"`
 }
 
-type ResponseError struct {
-	msg string
-	res *http.Response
-}
-
 type UserDataResponse struct {
 	MakerCommission  int             `json:"makerCommission"`
 	TakerCommission  int             `json:"takerCommission"`
@@ -276,7 +272,6 @@ type UserDataResponse struct {
 	UpdateTime       int             `json:"updateTime"`
 	Balances         []WalletBalance `json:"balances"`
 }
-
 type WalletBalance struct {
 	Asset  string          `json:"asset"`
 	Free   decimal.Decimal `json:"free"`
@@ -311,6 +306,59 @@ type Trade struct {
 
 type ListenKeyPayload struct {
 	ListenKey string `json:"listenKey"`
+}
+
+type KlineRequest struct {
+	Symbol    string `json:"symbol"`
+	Interval  string `json:"interval"`
+	Limit     int    `json:"limit,omitempty"`
+	StartTime int64  `json:"startTime,omitempty"`
+	EndTime   int64  `json:"endTime,omitempty"`
+}
+
+type Kline struct {
+	OpenTime         time.Time
+	CloseTime        time.Time
+	OpenPrice        decimal.Decimal
+	ClosePrice       decimal.Decimal
+	LowPrice         decimal.Decimal
+	HighPrice        decimal.Decimal
+	BaseVolume       decimal.Decimal
+	QuoteVolume      decimal.Decimal
+	TradeCount       int
+	TakerAssetVolume decimal.Decimal
+	TakerQuoteVolume decimal.Decimal
+}
+
+func (k *Kline) UnmarshalJSON(b []byte) error {
+	var (
+		tmp interface{}
+		err error
+	)
+	if err := json.Unmarshal(b, &tmp); err != nil {
+		return err
+	}
+
+	openInNano := tmp.([]interface{})[0].(float64) * 1000000
+	k.OpenTime = time.Unix(0, int64(openInNano))
+	k.OpenPrice, err = decimal.NewFromString(tmp.([]interface{})[1].(string))
+	k.HighPrice, err = decimal.NewFromString(tmp.([]interface{})[2].(string))
+	k.LowPrice, err = decimal.NewFromString(tmp.([]interface{})[3].(string))
+	k.ClosePrice, err = decimal.NewFromString(tmp.([]interface{})[4].(string))
+	k.BaseVolume, err = decimal.NewFromString(tmp.([]interface{})[5].(string))
+	closeInNano := tmp.([]interface{})[6].(float64) * 1000000
+	k.CloseTime = time.Unix(0, int64(closeInNano))
+	k.QuoteVolume, err = decimal.NewFromString(tmp.([]interface{})[7].(string))
+	k.TradeCount = int(tmp.([]interface{})[8].(float64))
+	k.TakerAssetVolume, err = decimal.NewFromString(tmp.([]interface{})[9].(string))
+	k.TakerQuoteVolume, err = decimal.NewFromString(tmp.([]interface{})[10].(string))
+
+	return err
+}
+
+type ResponseError struct {
+	msg string
+	res *http.Response
 }
 
 func (e ResponseError) Error() string            { return e.msg }

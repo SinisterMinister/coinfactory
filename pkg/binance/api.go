@@ -92,3 +92,7 @@ func GetAllMarketTickersStream(handler AllMarketTickersStreamHandler) chan bool 
 func GetUserDataStream(listenKey ListenKeyPayload, handler UserDataStreamHandler) chan bool {
 	return getUserDataStream(listenKey, handler)
 }
+
+func GetKlines(request KlineRequest) ([]Kline, error) {
+	return getKlines(request)
+}

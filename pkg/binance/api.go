@@ -12,7 +12,7 @@ func GetExchangeInfo() ExchangeInfo {
 	return exchangeInfoCache
 }
 
-func GetSymbols() map[string]Symbol {
+func GetSymbols() map[string]SymbolData {
 	cacheMux.Lock()
 	defer cacheMux.Unlock()
 	return symbolCache
@@ -29,7 +29,7 @@ func GetSymbolsAsStrings() []string {
 	return symbolStrings
 }
 
-func GetSymbol(symbol string) Symbol {
+func GetSymbol(symbol string) SymbolData {
 	cacheMux.Lock()
 	defer cacheMux.Unlock()
 	return symbolCache[symbol]

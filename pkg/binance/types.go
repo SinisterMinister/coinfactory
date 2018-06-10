@@ -14,10 +14,10 @@ type ServerTime struct {
 
 // ExchangeInfo contains the response from the exchangeInfo API call
 type ExchangeInfo struct {
-	Timezone   string      `json:"timezone"`
-	ServerTime int         `json:"serverTime"`
-	RateLimits []RateLimit `json:"rateLimits"`
-	Symbols    []Symbol    `json:"symbols"`
+	Timezone   string       `json:"timezone"`
+	ServerTime int          `json:"serverTime"`
+	RateLimits []RateLimit  `json:"rateLimits"`
+	Symbols    []SymbolData `json:"symbols"`
 }
 
 // RateLimit contains the rate limit settings of the API
@@ -27,8 +27,8 @@ type RateLimit struct {
 	Limit         int    `json:"limit"`
 }
 
-// Symbol contains the data for the symbol retrieved with the exchange info
-type Symbol struct {
+// SymbolData contains the data for the symbol retrieved with the exchange info
+type SymbolData struct {
 	Symbol             string                 `json:"symbol"`
 	Status             string                 `json:"status"`
 	BaseAsset          string                 `json:"baseAsset"`

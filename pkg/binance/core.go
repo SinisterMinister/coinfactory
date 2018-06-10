@@ -12,7 +12,7 @@ import (
 
 var (
 	exchangeInfoCache ExchangeInfo
-	symbolCache       map[string]Symbol
+	symbolCache       map[string]SymbolData
 	serverTimeDelta   time.Duration
 	cacheMux          *sync.Mutex
 	interrupt         chan os.Signal
@@ -71,14 +71,14 @@ func setExchangeInfoCache(info ExchangeInfo) {
 	exchangeInfoCache = info
 }
 
-func setSymbolCache(cache map[string]Symbol) {
+func setSymbolCache(cache map[string]SymbolData) {
 	cacheMux.Lock()
 	defer cacheMux.Unlock()
 	symbolCache = cache
 }
 
-func buildSymbolCache(info ExchangeInfo) map[string]Symbol {
-	symbols := make(map[string]Symbol)
+func buildSymbolCache(info ExchangeInfo) map[string]SymbolData {
+	symbols := make(map[string]SymbolData)
 
 	for _, s := range info.Symbols {
 		symbols[s.Symbol] = s

@@ -88,7 +88,11 @@ filterLoop:
 	for _, s := range symbols {
 		if _, ok := hanlder.processors[s]; !ok {
 			// Start the processor
-			proc := hanlder.processorFactory(binance.GetSymbol(s))
+			symbol, err := GetSymbolService().GetSymbol(s)
+			if err != nil {
+				continue
+			}
+			proc := hanlder.processorFactory(symbol)
 
 			log.Info("Processor for " + s + " is starting")
 			hanlder.processors[s] = newSymbolStreamProcessorWrapper(proc)

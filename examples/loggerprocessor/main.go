@@ -21,7 +21,7 @@ func (processor *LoggerSymbolTickerStreamProcessor) ProcessData(data binance.Sym
 
 // processorFactory implements the SymbolStreamProcessorFactory contract which allows Coinfactory to
 // create processors for each symbol
-func processorFactory(symbol binance.Symbol) coinfactory.SymbolStreamProcessor {
+func processorFactory(symbol *coinfactory.Symbol) coinfactory.SymbolStreamProcessor {
 	proc := LoggerSymbolTickerStreamProcessor{}
 	return &proc
 }

@@ -9,4 +9,4 @@ type SymbolStreamProcessor interface {
 	ProcessData(data binance.SymbolTickerData)
 }
 
-type SymbolStreamProcessorFactory func(symbol binance.Symbol) SymbolStreamProcessor
+type SymbolStreamProcessorFactory func(symbol *Symbol) SymbolStreamProcessor

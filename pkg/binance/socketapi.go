@@ -52,7 +52,7 @@ func getAllMarketTickersStream(handler AllMarketTickersStreamHandler) chan bool 
 			// Read the data and handle any errors
 			err := conn.ReadJSON(&payload)
 			if err != nil {
-				log.WithError(err).Error(err)
+				log.WithError(err).Error("could not read from symbol ticker socket")
 				return
 			}
 
@@ -120,7 +120,7 @@ func getUserDataStream(listenKey ListenKeyPayload, handler UserDataStreamHandler
 
 			log.WithField("raw paylaod", fmt.Sprintf("%s", message)).Debug("Received user data payload")
 			if err := json.Unmarshal(message, &payload); err != nil {
-				log.WithError(err).Error(err)
+				log.WithError(err).Error("could not receive user data")
 				return
 			}
 

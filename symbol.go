@@ -9,6 +9,7 @@ import (
 
 type Symbol struct {
 	binance.SymbolData
+	Ticker binance.SymbolTickerData
 }
 
 // func (s *Symbol) GetTickerStream() {}
@@ -86,4 +87,6 @@ func (s *Symbol) GetCurrentTrixIndicator(interval string, periods float64) (ma f
 	return ma, oscillator, err
 }
 
-// func (s *Symbol) GetTicker() {}
+func (s *Symbol) GetTicker() binance.SymbolTickerData {
+	return s.Ticker
+}

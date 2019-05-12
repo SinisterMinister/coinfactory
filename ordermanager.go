@@ -1,12 +1,8 @@
 package coinfactory
 
 import (
-	"os"
-	"os/signal"
 	"sync"
 	"time"
-
-	"github.com/spf13/viper"
 
 	"github.com/shopspring/decimal"
 	"github.com/sinisterminister/coinfactory/pkg/binance"
@@ -24,9 +20,9 @@ type OrderRequest struct {
 // Order contains the state of the order
 type Order struct {
 	OrderRequest
-	orderAck          binance.OrderResponseAckResponse
 	orderStatus       binance.OrderStatusResponse
 	orderCreationTime time.Time
+	orderID           int
 	mux               *sync.Mutex
 }
 
@@ -48,10 +44,21 @@ type OrderLogger interface {
 	LogOrder(order binance.OrderStatusResponse) error
 }
 
+type OrderStreamProcessor struct{}
+
+func (processor *OrderStreamProcessor) ProcessUserData(data binance.UserDataPayload) {
+	payload := data.OrderUpdatePayload
+	if payload.EventTime != 0 {
+		log.WithField("data", data.OrderUpdatePayload).Info("Order data received")
+	}
+}
+
 type OrderManager interface {
 	AttemptOrder(req OrderRequest) (*Order, error)
 	AttemptTestOrder(req OrderRequest) error
 	CancelOrder(order *Order) error
+	GetOpenOrders(symbol *Symbol) ([]*Order, error)
+	GetOrderDataStreamProcessor() *OrderStreamProcessor
 }
 
 // Singleton implementation of OrderManager
@@ -72,7 +79,8 @@ func getOrderManagerInstance() OrderManager {
 			lastSeenTrade: map[string]int{},
 			openOrdersMux: &sync.Mutex{},
 		}
-		i.startOrderWatcher()
+
+		i.startOrderStreamWatcher()
 		instance = i
 	})
 
@@ -149,7 +157,7 @@ func (om *orderManager) AttemptTestOrder(order OrderRequest) error {
 func (om *orderManager) CancelOrder(order *Order) error {
 	cr := binance.OrderCancellationRequest{
 		Symbol:  order.Symbol,
-		OrderID: order.orderAck.OrderID,
+		OrderID: order.orderID,
 	}
 
 	_, err := binance.CancelOrder(cr)
@@ -171,67 +179,89 @@ func (om *orderManager) logOrder(order binance.OrderStatusResponse) {
 func orderBuilder(req OrderRequest, ack binance.OrderResponseAckResponse) *Order {
 	return &Order{
 		req,
-		ack,
 		binance.OrderStatusResponse{},
 		time.Now(),
+		ack.OrderID,
 		&sync.Mutex{},
 	}
 }
 
-func (om *orderManager) startOrderWatcher() {
-	go func() {
-		// Start a ticker for polling
-		ticker := time.NewTicker(time.Duration(viper.GetInt("orderUpdateInterval")) * time.Second)
-
-		// Intercept the interrupt signal and pass it along
-		interrupt := make(chan os.Signal, 1)
-		signal.Notify(interrupt, os.Interrupt)
-
-		for {
-			select {
-			case <-ticker.C:
-				log.Info("Updating order statuses")
-				om.openOrdersMux.Lock()
-				cp := make(map[int]*Order)
-				for k, v := range om.openOrders {
-					cp[k] = v
-				}
-				om.openOrdersMux.Unlock()
-				for _, o := range cp {
-					om.updateOrderStatus(o)
-				}
-			case <-interrupt:
-				ticker.Stop()
-				log.Warn("Stopping order watcher")
-				defer log.Warn("Order watcher stopped")
-				return
-			}
+func (om *orderManager) updateOrderStatusFromStreamProcessor(data binance.OrderUpdatePayload) {
+	order, ok := om.openOrders[data.OrderID]
+	if ok {
+		order.mux.Lock()
+		switch data.CurrentOrderStatus {
+		case "FILLED":
+			fallthrough
+		case "CANCELED":
+			fallthrough
+		case "REJECTED":
+			fallthrough
+		case "EXPIRED":
+			om.openOrdersMux.Lock()
+			delete(om.openOrders, data.OrderID)
+			om.openOrdersMux.Unlock()
 		}
-	}()
+		// Build an order status
+		status := binance.OrderStatusResponse{
+			order.Symbol,
+			order.orderID,
+			data.ClientOrderID,
+			order.Price,
+			data.OrderQuantity,
+			data.FilledQuantity,
+			data.CurrentOrderStatus,
+			data.TimeInForce,
+			data.OrderType,
+			data.Side,
+			data.StopPrice.String(),
+			data.IcebergQuantity,
+			int(order.orderCreationTime.Unix()),
+			data.EventTime,
+			data.IsWorking,
+		}
+		order.orderStatus = status
+		order.mux.Unlock()
+	}
+
 }
 
-func (om *orderManager) updateOrderStatus(order *Order) {
-	res, err := binance.GetOrderStatus(binance.OrderStatusRequest{
-		Symbol:  order.Symbol,
-		OrderID: order.orderAck.OrderID,
-	})
+func (manager *orderManager) GetOpenOrders(symbol *Symbol) (orders []*Order, err error) {
+	rawOrders, err := binance.GetOpenOrders(binance.OpenOrdersRequest{Symbol: symbol.Symbol})
 	if err != nil {
-		log.WithError(err).WithField("order", order).Error("Could not update order status!")
-		return
+		log.WithError(err).Error("could not get open orders")
+		return orders, err
 	}
-	order.mux.Lock()
-	switch res.Status {
-	case "FILLED":
-		fallthrough
-	case "CANCELED":
-		fallthrough
-	case "REJECTED":
-		fallthrough
-	case "EXPIRED":
-		om.openOrdersMux.Lock()
-		delete(om.openOrders, order.orderAck.OrderID)
-		om.openOrdersMux.Unlock()
+
+	orders = []*Order{}
+
+	for _, v := range rawOrders {
+		order := &Order{
+			OrderRequest{
+				Side:     v.Side,
+				Symbol:   v.Symbol,
+				Quantity: v.OriginalQuantity,
+				Price:    v.Price,
+			},
+			v,
+			time.Unix(0, int64(v.Timestamp*1e6)),
+			v.OrderID,
+			&sync.Mutex{},
+		}
+		// Add to return
+		orders = append(orders, order)
+
+		// Add to open orders list
+		manager.openOrders[order.orderID] = order
 	}
-	order.orderStatus = res
-	order.mux.Unlock()
+
+	return orders, err
+}
+
+func (om *orderManager) startOrderStreamWatcher() {
+	getUserDataStreamHandlerInstance().registerProcessor("coinfactory.orderstreamprocessor", om.GetOrderDataStreamProcessor())
+}
+
+func (manager *orderManager) GetOrderDataStreamProcessor() *OrderStreamProcessor {
+	return &OrderStreamProcessor{}
 }

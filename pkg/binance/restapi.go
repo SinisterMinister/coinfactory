@@ -68,7 +68,7 @@ func placeOrder(order OrderRequest, response interface{}) error {
 			"statusCode":  res.StatusCode,
 			"requestBody": requestBody,
 			"body":        fmt.Sprintf("%s", body),
-		}).Warn("Error placing test order!")
+		}).Warn("Error placing order!")
 		return ResponseError{"Error placing order!", res}
 	}
 
@@ -213,5 +213,23 @@ func getKlines(req KlineRequest) ([]Kline, error) {
 	}
 
 	err = getJSONResponse(res, &response)
+	return response, err
+}
+
+func getOpenOrders(req OpenOrdersRequest) (response []OrderStatusResponse, err error) {
+	response = []OrderStatusResponse{}
+	u := buildURL("/api/v3/openOrders")
+	u.RawQuery = structToMap(req).Encode()
+	res, err := signedGet(u)
+	if err != nil {
+		return response, err
+	}
+
+	if res.StatusCode >= 400 {
+		return response, ResponseError{"Error getting orders!", res}
+	}
+
+	err = getJSONResponse(res, &response)
+
 	return response, err
 }

@@ -58,7 +58,17 @@ func getBalanceManagerInstance() BalanceManager {
 func (bm *balanceManager) init() {
 	err := bm.refreshWallets()
 	if err != nil {
-		log.WithError(err).Fatal("Could not update wallet balances")
+		res, ok := err.(binance.ResponseError)
+		if !ok {
+			log.WithError(err).Fatal("Could not update wallet balances")
+		} else {
+			body, ok := res.ResponseBodyString()
+			if !ok {
+				log.WithError(err).Fatal("Could not update wallet balances")
+			}
+			log.WithError(err).WithField("response", body).Fatal("Could not update wallet balances")
+		}
+
 	}
 
 	// Setup user data stream processor to handle balance managing

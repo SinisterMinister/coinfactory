@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"time"
+	"io/ioutil"
 
 	"github.com/shopspring/decimal"
 )
@@ -213,19 +214,25 @@ type OrderResponseAckResponse struct {
 
 type OrderResponseResultResponse struct {
 	OrderResponseAckResponse
-	Price            decimal.Decimal `json:"price"`
-	OriginalQuantity decimal.Decimal `json:"origQty"`
-	ExecutedQuantity decimal.Decimal `json:"executedQty"`
-	Status           string          `json:"status"`
-	TimeInForce      string          `json:"timeInForce"`
-	Type             string          `json:"type"`
-	Side             string          `json:"side"`
+	Price                    decimal.Decimal `json:"price"`
+	OriginalQuantity         decimal.Decimal `json:"origQty"`
+	CummulativeQuoteQuantity decimal.Decimal `json:"cummulativeQuoteQty"`
+	ExecutedQuantity         decimal.Decimal `json:"executedQty"`
+	Status                   string          `json:"status"`
+	TimeInForce              string          `json:"timeInForce"`
+	Type                     string          `json:"type"`
+	Side                     string          `json:"side"`
 }
 
 type OrderStatusRequest struct {
 	Symbol        string `json:"symbol"`
 	OrderID       int    `json:"orderId,omitempty"`
 	ClientOrderID string `json:"clientOrderId,omitempty"`
+	ReceiveWindow int    `json:"recvWindow,omitempty"`
+}
+
+type OpenOrdersRequest struct {
+	Symbol        string `json:"symbol"`
 	ReceiveWindow int    `json:"recvWindow,omitempty"`
 }
 
@@ -242,7 +249,8 @@ type OrderStatusResponse struct {
 	Side             string          `json:"side"`
 	StopPrice        string          `json:"stopPrice"`
 	IcebergQuantity  decimal.Decimal `json:"icebergQty"`
-	Timestamp        int             `json:"TIME"`
+	Timestamp        int             `json:"time"`
+	LastUpdated      int             `json:"updateTime"`
 	IsWorking        bool            `json:"isWorking"`
 }
 
@@ -363,3 +371,11 @@ type ResponseError struct {
 
 func (e ResponseError) Error() string            { return e.msg }
 func (e ResponseError) Response() *http.Response { return e.res }
+func (e ResponseError) ResponseBodyString() (string, bool) {
+	bodyBytes, err := ioutil.ReadAll(e.res.Body)
+    if err != nil {
+        return "", false
+    }
+    bodyString := string(bodyBytes)
+	return bodyString, true
+}

@@ -96,3 +96,7 @@ func GetUserDataStream(listenKey ListenKeyPayload, handler UserDataStreamHandler
 func GetKlines(request KlineRequest) ([]Kline, error) {
 	return getKlines(request)
 }
+
+func GetOpenOrders(request OpenOrdersRequest) ([]OrderStatusResponse, error) {
+	return getOpenOrders(request)
+}

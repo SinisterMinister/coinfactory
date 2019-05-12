@@ -50,6 +50,8 @@ func PlaceOrderGetResult(order OrderRequest) (OrderResponseResultResponse, error
 
 func PlaceOrderGetAck(order OrderRequest) (OrderResponseAckResponse, error) {
 	var response OrderResponseAckResponse
+	// Make sure response type is ack
+	order.ResponseType = "ACK"
 	err := placeOrder(order, &response)
 	if err != nil {
 		return OrderResponseAckResponse{}, err

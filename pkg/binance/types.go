@@ -165,6 +165,7 @@ type OrderUpdatePayload struct {
 	TradeID               int             `json:"t"`
 	IsWorking             bool            `json:"w"`
 	IsMaker               bool            `json:"m"`
+	OrderCreationTime int `json:"O"`
 }
 
 type UserDataPayload struct {

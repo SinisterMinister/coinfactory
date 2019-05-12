@@ -13,6 +13,10 @@ type BalanceManager interface {
 	// GetBalance returns the account
 	GetAvailableBalance(asset string) decimal.Decimal
 	GetFrozenBalance(asset string) decimal.Decimal
+	GetUsableBalance(asset string) decimal.Decimal
+	GetReservedBalance(asset string) decimal.Decimal
+	AddReservedBalance(asset string, amount decimal.Decimal)
+	SubReservedBalance(asset string, amount decimal.Decimal)
 }
 
 type balanceManagerStreamProcessor struct{}
@@ -30,7 +34,8 @@ type balanceManager struct {
 
 type walletWrapper struct {
 	binance.WalletBalance
-	mux *sync.Mutex
+	mux      *sync.Mutex
+	Reserved decimal.Decimal
 }
 
 type InsufficientFundsError struct {
@@ -82,11 +87,39 @@ func (bm *balanceManager) GetAvailableBalance(asset string) decimal.Decimal {
 	return wallet.Free
 }
 
+func (bm *balanceManager) GetUsableBalance(asset string) decimal.Decimal {
+	wallet := bm.getWallet(asset)
+	wallet.mux.Lock()
+	defer wallet.mux.Unlock()
+	return wallet.Free.Sub(wallet.Reserved)
+}
+
 func (bm *balanceManager) GetFrozenBalance(asset string) decimal.Decimal {
 	wallet := bm.getWallet(asset)
 	wallet.mux.Lock()
 	defer wallet.mux.Unlock()
 	return wallet.Locked
+}
+
+func (bm *balanceManager) GetReservedBalance(asset string) decimal.Decimal {
+	wallet := bm.getWallet(asset)
+	wallet.mux.Lock()
+	defer wallet.mux.Unlock()
+	return wallet.Reserved
+}
+
+func (bm *balanceManager) AddReservedBalance(asset string, amount decimal.Decimal) {
+	wallet := bm.getWallet(asset)
+	wallet.mux.Lock()
+	defer wallet.mux.Unlock()
+	wallet.Reserved = wallet.Reserved.Add(amount)
+}
+
+func (bm *balanceManager) SubReservedBalance(asset string, amount decimal.Decimal) {
+	wallet := bm.getWallet(asset)
+	wallet.mux.Lock()
+	defer wallet.mux.Unlock()
+	wallet.Reserved = wallet.Reserved.Sub(amount)
 }
 
 func (bm *balanceManager) addFreeAmount(asset string, amount decimal.Decimal) {
@@ -159,7 +192,7 @@ func (bm *balanceManager) refreshWallets() error {
 	}
 
 	for _, w := range userData.Balances {
-		bm.wallets[w.Asset] = &walletWrapper{w, &sync.Mutex{}}
+		bm.wallets[w.Asset] = &walletWrapper{w, &sync.Mutex{}, decimal.Decimal{}}
 	}
 
 	return nil
@@ -170,7 +203,7 @@ func (bm *balanceManager) getWallet(asset string) *walletWrapper {
 	defer walletMux.Unlock()
 	w, ok := bm.wallets[asset]
 	if !ok {
-		w = &walletWrapper{binance.WalletBalance{}, &sync.Mutex{}}
+		w = &walletWrapper{binance.WalletBalance{}, &sync.Mutex{}, decimal.Decimal{}}
 		bm.wallets[asset] = w
 	}
 

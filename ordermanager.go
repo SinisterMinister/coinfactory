@@ -24,6 +24,7 @@ type Order struct {
 	orderCreationTime time.Time
 	orderID           int
 	mux               *sync.Mutex
+	doneChan          chan int
 }
 
 // GetStatus
@@ -40,16 +41,23 @@ func (o *Order) GetAge() time.Duration {
 	return time.Since(o.orderCreationTime)
 }
 
+func (o *Order) GetDoneChan() <-chan int {
+	return o.doneChan
+}
+
 type OrderLogger interface {
 	LogOrder(order binance.OrderStatusResponse) error
 }
 
-type OrderStreamProcessor struct{}
+type OrderStreamProcessor struct {
+	om *orderManager
+}
 
 func (processor *OrderStreamProcessor) ProcessUserData(data binance.UserDataPayload) {
 	payload := data.OrderUpdatePayload
 	if payload.EventTime != 0 {
-		log.WithField("data", data.OrderUpdatePayload).Info("Order data received")
+		log.WithField("data", data.OrderUpdatePayload).Debug("Order data received")
+		processor.om.updateOrderStatusFromStreamProcessor(data.OrderUpdatePayload)
 	}
 }
 
@@ -183,12 +191,16 @@ func orderBuilder(req OrderRequest, ack binance.OrderResponseAckResponse) *Order
 		time.Now(),
 		ack.OrderID,
 		&sync.Mutex{},
+		make(chan int),
 	}
 }
 
 func (om *orderManager) updateOrderStatusFromStreamProcessor(data binance.OrderUpdatePayload) {
+	om.openOrdersMux.Lock()
 	order, ok := om.openOrders[data.OrderID]
+	om.openOrdersMux.Unlock()
 	if ok {
+		log.Info("Updating order status")
 		order.mux.Lock()
 		switch data.CurrentOrderStatus {
 		case "FILLED":
@@ -200,6 +212,7 @@ func (om *orderManager) updateOrderStatusFromStreamProcessor(data binance.OrderU
 		case "EXPIRED":
 			om.openOrdersMux.Lock()
 			delete(om.openOrders, data.OrderID)
+			close(order.doneChan)
 			om.openOrdersMux.Unlock()
 		}
 		// Build an order status
@@ -216,7 +229,7 @@ func (om *orderManager) updateOrderStatusFromStreamProcessor(data binance.OrderU
 			data.Side,
 			data.StopPrice.String(),
 			data.IcebergQuantity,
-			int(order.orderCreationTime.Unix()),
+			data.OrderCreationTime,
 			data.EventTime,
 			data.IsWorking,
 		}
@@ -247,6 +260,7 @@ func (manager *orderManager) GetOpenOrders(symbol *Symbol) (orders []*Order, err
 			time.Unix(0, int64(v.Timestamp*1e6)),
 			v.OrderID,
 			&sync.Mutex{},
+			make(chan int),
 		}
 		// Add to return
 		orders = append(orders, order)
@@ -263,5 +277,5 @@ func (om *orderManager) startOrderStreamWatcher() {
 }
 
 func (manager *orderManager) GetOrderDataStreamProcessor() *OrderStreamProcessor {
-	return &OrderStreamProcessor{}
+	return &OrderStreamProcessor{manager}
 }

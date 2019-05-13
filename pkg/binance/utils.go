@@ -194,12 +194,6 @@ func signedDelete(u *url.URL) (*http.Response, error) {
 }
 
 func sendRequest(req *http.Request) (*http.Response, error) {
-	// rawRequest, _ := httputil.DumpRequest(req, true)
-
-	// log.WithFields(log.Fields{
-	// 	"request": rawRequest,
-	// }).Debug("Sending request to API...")
-
 	resp, err := getHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
@@ -239,6 +233,7 @@ func unsignedGetJSON(u *url.URL, obj interface{}) error {
 
 func getJSONResponse(response *http.Response, obj interface{}) error {
 	body, readerr := ioutil.ReadAll(response.Body)
+	response.Body.Close()
 	if readerr != nil {
 		return readerr
 	}

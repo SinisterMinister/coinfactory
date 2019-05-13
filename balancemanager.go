@@ -25,7 +25,6 @@ func (b *balanceManagerStreamProcessor) ProcessUserData(data binance.UserDataPay
 	if data.AccountUpdatePayload.EventTime != 0 {
 		localBalanceManagerInstance.handleUserDataStream(data.AccountUpdatePayload)
 	}
-
 }
 
 type balanceManager struct {

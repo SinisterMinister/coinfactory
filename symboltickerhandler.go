@@ -25,7 +25,7 @@ type symbolTickerStreamHandler struct {
 	processors       map[string]symbolStreamProcessorWrapper
 	processorFactory SymbolStreamProcessorFactory
 	mux              *sync.Mutex
-	doneChannel      chan bool
+	doneChannel      chan<- bool
 }
 
 func (handler *symbolTickerStreamHandler) start() {
@@ -38,7 +38,7 @@ func (handler *symbolTickerStreamHandler) start() {
 		handler.refreshProcessors()
 	})
 
-	handler.doneChannel = binance.GetAllMarketTickersStream(handler)
+	handler.doneChannel = binance.GetCombinedTickerStream(fetchWatchedSymbols(), handler)
 }
 
 func (handler *symbolTickerStreamHandler) stop() {

@@ -2,9 +2,9 @@ package binance
 
 import (
 	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"time"
-	"io/ioutil"
 
 	"github.com/shopspring/decimal"
 )
@@ -118,8 +118,8 @@ type SymbolTickerData struct {
 	TotalNumberOfTrades  int             `json:"n"`
 }
 
-// AllMarketTickersStreamHandler handles incoming data from GetAllMarketTickersStream
-type AllMarketTickersStreamHandler interface {
+// TickersStreamHandler handles incoming data from GetAllMarketTickersStream
+type TickersStreamHandler interface {
 	ReceiveData(payload []SymbolTickerData)
 }
 
@@ -165,7 +165,7 @@ type OrderUpdatePayload struct {
 	TradeID               int             `json:"t"`
 	IsWorking             bool            `json:"w"`
 	IsMaker               bool            `json:"m"`
-	OrderCreationTime int `json:"O"`
+	OrderCreationTime     int             `json:"O"`
 }
 
 type UserDataPayload struct {
@@ -190,6 +190,11 @@ func (udp *UserDataPayload) UnmarshalJSON(b []byte) error {
 		}
 	}
 	return nil
+}
+
+type CombinedTickerStreamPayload struct {
+	StreamName string `json:"stream"`
+	Data SymbolTickerData `json:"data"`
 }
 
 type OrderRequest struct {
@@ -374,9 +379,9 @@ func (e ResponseError) Error() string            { return e.msg }
 func (e ResponseError) Response() *http.Response { return e.res }
 func (e ResponseError) ResponseBodyString() (string, bool) {
 	bodyBytes, err := ioutil.ReadAll(e.res.Body)
-    if err != nil {
-        return "", false
-    }
-    bodyString := string(bodyBytes)
+	if err != nil {
+		return "", false
+	}
+	bodyString := string(bodyBytes)
 	return bodyString, true
 }

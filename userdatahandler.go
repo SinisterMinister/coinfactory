@@ -21,7 +21,7 @@ func (wrapper *userDataStreamProcessorWrapper) kill() {
 type userDataStreamHandler struct {
 	processors           map[string]userDataStreamProcessorWrapper
 	mux                  *sync.Mutex
-	streamDoneChannel    chan bool
+	streamDoneChannel    chan<- bool
 	keepaliveDoneChannel chan bool
 }
 

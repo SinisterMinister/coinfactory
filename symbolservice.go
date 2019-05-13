@@ -15,7 +15,7 @@ type SymbolService interface {
 type symbolService struct {
 	symbols                 map[string]*Symbol
 	tickerStreamInitialized chan bool
-	tickerStreamDone        chan bool
+	tickerStreamDone        chan<- bool
 }
 
 var (
@@ -59,7 +59,7 @@ func (s *symbolService) ReceiveData(data []binance.SymbolTickerData) {
 
 func (s *symbolService) startTickerStream() {
 	s.tickerStreamInitialized = make(chan bool)
-	s.tickerStreamDone = binance.GetAllMarketTickersStream(s)
+	s.tickerStreamDone = binance.GetCombinedTickerStream(fetchWatchedSymbols(), s)
 	symbolServiceInitialized = <-s.tickerStreamInitialized
 }
 

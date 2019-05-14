@@ -311,3 +311,97 @@ func getUserDataStream(listenKey ListenKeyPayload, handler UserDataStreamHandler
 
 	return stopChan
 }
+
+func getKlineStream(stopChan <-chan bool, symbol string, interval string) <-chan KlineStreamPayload {
+	// Channel used to exit the handler
+	doneChan := make(chan bool)
+	// Channel used to move data
+	dataChan := make(chan KlineStreamPayload)
+	// Channel for failure capture
+	failChan := make(chan bool)
+	// Intercept the interrupt signal and pass it along
+	interrupt := make(chan os.Signal, 1)
+
+	// We need to generate the URL based on the requested symbol
+	url := "/ws/" + strings.ToLower(symbol) + "@kline_" + interval
+
+	dataHandler := func(conn *websocket.Conn) {
+		// Loop forever over the stream
+		for {
+			// Create a container for the data
+			var payload KlineStreamPayload
+
+			// Read the data and handle any errors
+			_, message, err := conn.ReadMessage()
+			if err != nil {
+				// Something bad happened. Time to bail and try again
+				log.WithError(err).Error(err)
+				failChan <- true
+				return
+			}
+
+			log.WithField("raw paylaod", fmt.Sprintf("%s", message)).Debug("Received kline stream data")
+			if err := json.Unmarshal(message, &payload); err != nil {
+				log.WithError(err).Error("could not receive kline stream data")
+				failChan <- true
+				return
+			}
+
+			// Pass the data to the handler
+			dataChan <- payload
+		}
+	}
+
+	// Handler closure wrapped in a goroutine
+	socketHandler := func() {
+		// Open the websocket
+		conn := openSocket(url, nil)
+
+		// Fire up the data handler
+		go dataHandler(conn)
+
+		for {
+			select {
+			case <-doneChan:
+				defer conn.Close()
+				log.Info("Closing combined ticker stream socket connection...")
+				// Cleanly close the connection by sending a close message and then
+				// waiting (with timeout) for the server to close the connection.
+				err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+				if err != nil {
+					log.Error(err)
+				}
+				return
+			}
+		}
+	}
+
+	failHandler := func() {
+		for {
+			select {
+			case <-failChan:
+				// Send a done to stop the routine
+				doneChan <- true
+
+				// Restart the routine
+				go socketHandler()
+			case <-stopChan:
+				// Send a done to stop the routine
+				doneChan <- true
+				return
+
+			case <-interrupt:
+				log.Println("interrupt")
+				doneChan <- true
+				return
+			}
+		}
+	}
+
+	// Start up the routine
+	go socketHandler()
+	// Start up the fail handler
+	go failHandler()
+
+	return dataChan
+}

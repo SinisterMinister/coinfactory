@@ -193,8 +193,8 @@ func (udp *UserDataPayload) UnmarshalJSON(b []byte) error {
 }
 
 type CombinedTickerStreamPayload struct {
-	StreamName string `json:"stream"`
-	Data SymbolTickerData `json:"data"`
+	StreamName string           `json:"stream"`
+	Data       SymbolTickerData `json:"data"`
 }
 
 type OrderRequest struct {
@@ -368,6 +368,32 @@ func (k *Kline) UnmarshalJSON(b []byte) error {
 	k.TakerQuoteVolume, err = decimal.NewFromString(tmp.([]interface{})[10].(string))
 
 	return err
+}
+
+type KlineStreamData struct {
+	OpenTime         int64           `json:"t"`
+	CloseTime        int64           `json:"T"`
+	Closed           bool            `json:"x"`
+	Symbol           string          `json:"s"`
+	Interval         string          `json:"i"`
+	FirstTradeID     int64           `json:"f"`
+	LastTradeID      int64           `json:"L"`
+	OpenPrice        decimal.Decimal `json:"o"`
+	ClosePrice       decimal.Decimal `json:"c"`
+	LowPrice         decimal.Decimal `json:"l"`
+	HighPrice        decimal.Decimal `json:"h"`
+	BaseVolume       decimal.Decimal `json:"v"`
+	QuoteVolume      decimal.Decimal `json:"q"`
+	TradeCount       int             `json:"n"`
+	TakerAssetVolume decimal.Decimal `json:"V"`
+	TakerQuoteVolume decimal.Decimal `json:"Q"`
+}
+
+type KlineStreamPayload struct {
+	Type      string          `json:"e"`
+	Timestamp int64       `json:"E"`
+	Symbol    string          `json:"s"`
+	KlineData KlineStreamData `json:"k"`
 }
 
 type ResponseError struct {

@@ -38,7 +38,7 @@ func (s *symbolService) initializeSymbols() {
 
 	rawSymbols := binance.GetSymbols()
 	for k, v := range rawSymbols {
-		s.symbols[k] = &Symbol{v, binance.SymbolTickerData{}}
+		s.symbols[k] = &Symbol{v, binance.SymbolTickerData{}, nil, "", nil}
 	}
 }
 

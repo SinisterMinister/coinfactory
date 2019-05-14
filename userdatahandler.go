@@ -125,3 +125,8 @@ func getUserDataStreamHandlerInstance() *userDataStreamHandler {
 
 	return usdhInstance
 }
+
+// SymbolStreamProcessor is the interface for stream processors
+type UserDataStreamProcessor interface {
+	ProcessUserData(data binance.UserDataPayload)
+}

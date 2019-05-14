@@ -5,11 +5,15 @@ import (
 
 	"github.com/VividCortex/ewma"
 	"github.com/sinisterminister/coinfactory/pkg/binance"
+	log "github.com/sirupsen/logrus"
 )
 
 type Symbol struct {
 	binance.SymbolData
-	Ticker binance.SymbolTickerData
+	Ticker                 binance.SymbolTickerData
+	trixKlineCache         []binance.Kline
+	trixKlineCacheInterval string
+	klineStreamStopChannel chan bool
 }
 
 // func (s *Symbol) GetTickerStream() {}
@@ -40,6 +44,55 @@ func (s *Symbol) GetKLines(interval string, start time.Time, end time.Time, limi
 	return binance.GetKlines(req)
 }
 
+func (s *Symbol) updateTrixKlineCache(interval string, periods float64) (err error) {
+	if s.trixKlineCache == nil || s.trixKlineCacheInterval != interval {
+		s.trixKlineCache = make([]binance.Kline, 0)
+		s.trixKlineCacheInterval = interval
+		if s.klineStreamStopChannel != nil {
+			close(s.klineStreamStopChannel)
+		}
+		s.klineStreamStopChannel = make(chan bool)
+
+		// Get the klines to work with
+		s.trixKlineCache, err = s.GetKLines(interval, time.Time{}, time.Time{}, int(periods*2*3+2))
+		if err != nil {
+			return err
+		}
+
+		// Start a stream to get updates
+		go func() {
+			stream := binance.GetKlineStream(s.klineStreamStopChannel, s.Symbol, interval)
+			for {
+				select {
+				case data := <-stream:
+					if data.KlineData.Closed {
+						// Build a Kline
+						kline := binance.Kline{
+							OpenTime:         time.Unix(0, data.KlineData.OpenTime*1000000),
+							CloseTime:        time.Unix(0, data.KlineData.CloseTime*1000000),
+							OpenPrice:        data.KlineData.OpenPrice,
+							ClosePrice:       data.KlineData.ClosePrice,
+							LowPrice:         data.KlineData.LowPrice,
+							HighPrice:        data.KlineData.HighPrice,
+							BaseVolume:       data.KlineData.BaseVolume,
+							QuoteVolume:      data.KlineData.QuoteVolume,
+							TradeCount:       data.KlineData.TradeCount,
+							TakerAssetVolume: data.KlineData.TakerAssetVolume,
+							TakerQuoteVolume: data.KlineData.TakerQuoteVolume,
+						}
+						s.trixKlineCache = append(s.trixKlineCache[1:], kline)
+						log.WithField("kline", kline).Debug("Updated Kline cache")
+					}
+				case <-s.klineStreamStopChannel:
+					return
+				}
+			}
+		}()
+	}
+
+	return err
+}
+
 func (s *Symbol) GetCurrentTrixIndicator(interval string, periods float64) (ma float64, oscillator float64, err error) {
 	singleSmoothedValues := []float64{}
 	doubleSmoothedValues := []float64{}
@@ -49,14 +102,11 @@ func (s *Symbol) GetCurrentTrixIndicator(interval string, periods float64) (ma f
 	doubleSmoothed := ewma.NewMovingAverage(periods)
 	tripleSmoothed := ewma.NewMovingAverage(periods)
 
-	// Get the klines to work with
-	klines, err := s.GetKLines(interval, time.Time{}, time.Time{}, int(periods*2*3+2))
-	if err != nil {
-		return ma, oscillator, err
-	}
+	// Update the kline cache
+	s.updateTrixKlineCache(interval, periods)
 
 	// Calculate the single smoothed moving average values
-	for _, kline := range klines {
+	for _, kline := range s.trixKlineCache {
 		price, _ := kline.ClosePrice.Float64()
 		singleSmoothed.Add(price)
 		if singleSmoothed.Value() != 0.0 {

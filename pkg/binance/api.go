@@ -106,3 +106,7 @@ func GetKlines(request KlineRequest) ([]Kline, error) {
 func GetOpenOrders(request OpenOrdersRequest) ([]OrderStatusResponse, error) {
 	return getOpenOrders(request)
 }
+
+func GetKlineStream(stopChan <-chan bool, symbol string, interval string) <-chan KlineStreamPayload {
+	return getKlineStream(stopChan, symbol, interval)
+}

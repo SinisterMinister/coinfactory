@@ -64,33 +64,38 @@ func getCombinedTickerStream(symbols []string, handler TickersStreamHandler) cha
 
 	query["streams"] = strings.Join(path, "/")
 
-	dataHandler := func(conn *websocket.Conn) {
+	dataHandler := func(done <-chan bool, conn *websocket.Conn) {
 		// Loop forever over the stream
 		for {
-			// Create a container for the data
-			var payload CombinedTickerStreamPayload
-
-			// Read the data and handle any errors
-			_, message, err := conn.ReadMessage()
-			if err != nil {
-				// Something bad happened. Time to bail and try again
-				log.WithError(err).Error(err)
-				failChan <- true
+			select {
+			case <-done:
 				return
+			default:
+				// Create a container for the data
+				var payload CombinedTickerStreamPayload
+
+				// Read the data and handle any errors
+				_, message, err := conn.ReadMessage()
+				if err != nil {
+					// Something bad happened. Time to bail and try again
+					log.WithError(err).Error(err)
+					failChan <- true
+					return
+				}
+
+				log.WithField("raw paylaod", fmt.Sprintf("%s", message)).Debug("Received combined ticker stream data")
+				if err := json.Unmarshal(message, &payload); err != nil {
+					log.WithError(err).Error("could not receive combined ticker stream data")
+					failChan <- true
+					return
+				}
+
+				var data []SymbolTickerData
+				data = append(data, payload.Data)
+
+				// Pass the data to the handler
+				dataChan <- data
 			}
-
-			log.WithField("raw paylaod", fmt.Sprintf("%s", message)).Debug("Received combined ticker stream data")
-			if err := json.Unmarshal(message, &payload); err != nil {
-				log.WithError(err).Error("could not receive combined ticker stream data")
-				failChan <- true
-				return
-			}
-
-			var data []SymbolTickerData
-			data = append(data, payload.Data)
-
-			// Pass the data to the handler
-			dataChan <- data
 		}
 	}
 
@@ -98,14 +103,18 @@ func getCombinedTickerStream(symbols []string, handler TickersStreamHandler) cha
 	socketHandler := func() {
 		// Open the websocket
 		conn := openSocket(url, query)
+		done := make(chan bool)
 
 		// Fire up the data handler
-		go dataHandler(conn)
+		go dataHandler(done, conn)
 
 		for {
+			restartTimer := time.NewTimer(10 * time.Second)
 			select {
 			case <-doneChan:
 				defer conn.Close()
+				// Close the data handler
+				done <- true
 				log.Info("Closing combined ticker stream socket connection...")
 				// Cleanly close the connection by sending a close message and then
 				// waiting (with timeout) for the server to close the connection.
@@ -117,8 +126,11 @@ func getCombinedTickerStream(symbols []string, handler TickersStreamHandler) cha
 
 			case data := <-dataChan:
 				handler.ReceiveData(data)
-			}
 
+			case <-restartTimer.C:
+				log.Warn("no combined ticker stream data in 10 seconds. restarting socket")
+				failChan <- true
+			}
 		}
 	}
 
@@ -227,30 +239,36 @@ func getUserDataStream(listenKey ListenKeyPayload, handler UserDataStreamHandler
 	// Intercept the interrupt signal and pass it along
 	interrupt := make(chan os.Signal, 1)
 
-	dataHandler := func(conn *websocket.Conn) {
+	dataHandler := func(done <-chan bool, conn *websocket.Conn) {
 		// Loop forever over the stream
 		for {
-			// Create a container for the data
-			var payload UserDataPayload
-
-			// Read the data and handle any errors
-			_, message, err := conn.ReadMessage()
-			if err != nil {
-				// Something bad happened. Time to bail and try again
-				log.WithError(err).Error(err)
-				failChan <- true
+			select {
+			case <-done:
 				return
+			default:
+				// Create a container for the data
+				var payload UserDataPayload
+
+				// Read the data and handle any errors
+				_, message, err := conn.ReadMessage()
+				if err != nil {
+					// Something bad happened. Time to bail and try again
+					log.WithError(err).Error(err)
+					failChan <- true
+					return
+				}
+
+				log.WithField("raw paylaod", fmt.Sprintf("%s", message)).Debug("Received user data payload")
+				if err := json.Unmarshal(message, &payload); err != nil {
+					log.WithError(err).Error("could not receive user data")
+					failChan <- true
+					return
+				}
+
+				// Pass the data to the handler
+				dataChan <- payload
 			}
 
-			log.WithField("raw paylaod", fmt.Sprintf("%s", message)).Debug("Received user data payload")
-			if err := json.Unmarshal(message, &payload); err != nil {
-				log.WithError(err).Error("could not receive user data")
-				failChan <- true
-				return
-			}
-
-			// Pass the data to the handler
-			dataChan <- payload
 		}
 	}
 
@@ -258,14 +276,18 @@ func getUserDataStream(listenKey ListenKeyPayload, handler UserDataStreamHandler
 	socketHandler := func() {
 		// Open the websocket
 		conn := openSocket("/ws/"+listenKey.ListenKey, nil)
+		done := make(chan bool)
 
 		// Fire up the data handler
-		go dataHandler(conn)
+		go dataHandler(done, conn)
 
 		for {
+			restartTimer := time.NewTimer(10 * time.Second)
 			select {
 			case <-doneChan:
 				defer conn.Close()
+				// Close data handler
+				done <- true
 				log.Info("Closing user data socket connection...")
 				// Cleanly close the connection by sending a close message and then
 				// waiting (with timeout) for the server to close the connection.
@@ -277,6 +299,10 @@ func getUserDataStream(listenKey ListenKeyPayload, handler UserDataStreamHandler
 
 			case payload := <-dataChan:
 				handler.ReceiveData(payload)
+
+			case <-restartTimer.C:
+				log.Warn("no user data in 10 seconds. restarting socket")
+				failChan <- true
 			}
 
 		}
@@ -315,6 +341,8 @@ func getUserDataStream(listenKey ListenKeyPayload, handler UserDataStreamHandler
 func getKlineStream(stopChan <-chan bool, symbol string, interval string) <-chan KlineStreamPayload {
 	// Channel used to exit the handler
 	doneChan := make(chan bool)
+	// Channel for staging data to send
+	dataStagingChan := make(chan KlineStreamPayload)
 	// Channel used to move data
 	dataChan := make(chan KlineStreamPayload)
 	// Channel for failure capture
@@ -325,30 +353,36 @@ func getKlineStream(stopChan <-chan bool, symbol string, interval string) <-chan
 	// We need to generate the URL based on the requested symbol
 	url := "/ws/" + strings.ToLower(symbol) + "@kline_" + interval
 
-	dataHandler := func(conn *websocket.Conn) {
+	dataHandler := func(done <-chan bool, conn *websocket.Conn) {
 		// Loop forever over the stream
 		for {
-			// Create a container for the data
-			var payload KlineStreamPayload
-
-			// Read the data and handle any errors
-			_, message, err := conn.ReadMessage()
-			if err != nil {
-				// Something bad happened. Time to bail and try again
-				log.WithError(err).Error(err)
-				failChan <- true
+			select {
+			case <-done:
 				return
+			default:
+				// Create a container for the data
+				var payload KlineStreamPayload
+
+				// Read the data and handle any errors
+				_, message, err := conn.ReadMessage()
+				if err != nil {
+					// Something bad happened. Time to bail and try again
+					log.WithError(err).Error(err)
+					failChan <- true
+					return
+				}
+
+				log.WithField("raw paylaod", fmt.Sprintf("%s", message)).Debug("Received kline stream data")
+				if err := json.Unmarshal(message, &payload); err != nil {
+					log.WithError(err).Error("could not receive kline stream data")
+					failChan <- true
+					return
+				}
+
+				// Pass the data to the handler
+				dataStagingChan <- payload
 			}
 
-			log.WithField("raw paylaod", fmt.Sprintf("%s", message)).Debug("Received kline stream data")
-			if err := json.Unmarshal(message, &payload); err != nil {
-				log.WithError(err).Error("could not receive kline stream data")
-				failChan <- true
-				return
-			}
-
-			// Pass the data to the handler
-			dataChan <- payload
 		}
 	}
 
@@ -356,15 +390,21 @@ func getKlineStream(stopChan <-chan bool, symbol string, interval string) <-chan
 	socketHandler := func() {
 		// Open the websocket
 		conn := openSocket(url, nil)
+		done := make(chan bool)
 
 		// Fire up the data handler
-		go dataHandler(conn)
+		go dataHandler(done, conn)
 
 		for {
+			restartTimer := time.NewTimer(10 * time.Second)
 			select {
+			case d := <-dataStagingChan:
+				dataChan <- d
+
 			case <-doneChan:
 				defer conn.Close()
-				log.Info("Closing combined ticker stream socket connection...")
+				done <- true
+				log.Info("Closing kline stream socket connection...")
 				// Cleanly close the connection by sending a close message and then
 				// waiting (with timeout) for the server to close the connection.
 				err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
@@ -372,6 +412,10 @@ func getKlineStream(stopChan <-chan bool, symbol string, interval string) <-chan
 					log.Error(err)
 				}
 				return
+
+			case <-restartTimer.C:
+				log.Warn("no kline data in 10 seconds. restarting socket")
+				failChan <- true
 			}
 		}
 	}

@@ -11,10 +11,10 @@ import (
 
 // OrderRequest contains the information required to place an order through the API
 type OrderRequest struct {
-	Symbol   string
-	Side     string
-	Quantity decimal.Decimal
-	Price    decimal.Decimal
+	Symbol   string          `json:"symbol"`
+	Side     string          `json:"side"`
+	Quantity decimal.Decimal `json:"qty"`
+	Price    decimal.Decimal `json:"price"`
 }
 
 // Order contains the state of the order

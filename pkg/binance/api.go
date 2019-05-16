@@ -95,8 +95,8 @@ func GetCombinedTickerStream(symbols []string, handler TickersStreamHandler) cha
 	return getCombinedTickerStream(symbols, handler)
 }
 
-func GetUserDataStream(listenKey ListenKeyPayload, handler UserDataStreamHandler) chan<- bool {
-	return getUserDataStream(listenKey, handler)
+func GetUserDataStream(stopChan <-chan bool) <-chan UserDataPayload {
+	return getUserDataStream(stopChan)
 }
 
 func GetKlines(request KlineRequest) ([]Kline, error) {

@@ -2,7 +2,6 @@ package coinfactory
 
 import (
 	"sync"
-	"time"
 
 	"github.com/sinisterminister/coinfactory/pkg/binance"
 	log "github.com/sirupsen/logrus"
@@ -19,10 +18,9 @@ func (wrapper *userDataStreamProcessorWrapper) kill() {
 }
 
 type userDataStreamHandler struct {
-	processors           map[string]userDataStreamProcessorWrapper
-	mux                  *sync.Mutex
-	streamDoneChannel    chan<- bool
-	keepaliveDoneChannel chan bool
+	processors        map[string]userDataStreamProcessorWrapper
+	mux               *sync.Mutex
+	streamDoneChannel chan bool
 }
 
 var udshOnce = sync.Once{}
@@ -30,34 +28,31 @@ var usdhInstance *userDataStreamHandler
 
 func (handler *userDataStreamHandler) start() {
 	log.Info("Starting user data stream handler")
-	listenKey, err := binance.CreateUserDataStream()
-	if err != nil {
-		log.WithError(err).Fatal("Could not create user data stream")
-	}
-	handler.streamDoneChannel = binance.GetUserDataStream(listenKey, handler)
-	handler.keepaliveDoneChannel = make(chan bool)
 
-	go func(done chan bool, listenKey binance.ListenKeyPayload) {
-		ticker := time.NewTicker(time.Duration(20) * time.Minute)
+	// Make done channel
+	handler.streamDoneChannel = make(chan bool)
+	go handler.processDataStream(handler.streamDoneChannel, binance.GetUserDataStream(handler.streamDoneChannel))
+}
 
-		log.Info("User data stream handler started successfully")
-
-		for {
-			select {
-			case <-ticker.C:
-				binance.KeepaliveUserDataStream(listenKey)
-			case <-done:
-				return
+func (handler *userDataStreamHandler) processDataStream(doneChan <-chan bool, dataChan <-chan binance.UserDataPayload) {
+	for {
+		select {
+		case data := <-dataChan:
+			handler.mux.Lock()
+			for _, proc := range handler.processors {
+				proc.dataChannel <- data
 			}
+			handler.mux.Unlock()
+		case <-doneChan:
+			return
 		}
-	}(handler.keepaliveDoneChannel, listenKey)
+	}
 }
 
 func (handler *userDataStreamHandler) stop() {
 	log.Warn("Stopping user data stream handler")
 	defer log.Warn("User data stream handler stopped")
 	// Kill the handler
-	handler.keepaliveDoneChannel <- true
 	handler.streamDoneChannel <- true
 
 	for _, p := range handler.processors {

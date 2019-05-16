@@ -227,15 +227,15 @@ func getAllMarketTickersStream(handler TickersStreamHandler) chan bool {
 	return done
 }
 
-func getUserDataStream(listenKey ListenKeyPayload, handler UserDataStreamHandler) chan<- bool {
+func getUserDataStream(stopChan <-chan bool) <-chan UserDataPayload {
 	// Channel used to exit the handler
 	doneChan := make(chan bool)
+	// Channel for staging data to send
+	dataStagingChan := make(chan UserDataPayload)
 	// Channel used to move data
 	dataChan := make(chan UserDataPayload)
 	// Channel for failure capture
 	failChan := make(chan bool)
-	// Channel for stopping stream processing
-	stopChan := make(chan bool)
 	// Intercept the interrupt signal and pass it along
 	interrupt := make(chan os.Signal, 1)
 
@@ -266,14 +266,34 @@ func getUserDataStream(listenKey ListenKeyPayload, handler UserDataStreamHandler
 				}
 
 				// Pass the data to the handler
-				dataChan <- payload
+				dataStagingChan <- payload
 			}
 
 		}
 	}
 
+	keepAliveHandler := func(done chan bool, listenKey ListenKeyPayload) {
+		ticker := time.NewTicker(time.Duration(20) * time.Minute)
+		for {
+			select {
+			case <-ticker.C:
+				KeepaliveUserDataStream(listenKey)
+			case <-done:
+				return
+			}
+		}
+	}
+
 	// Handler closure wrapped in a goroutine
 	socketHandler := func() {
+		// Fetch a listen key first
+		listenKey, err := CreateUserDataStream()
+		if err != nil {
+			log.Error(err)
+			failChan <- true
+			return
+		}
+
 		// Open the websocket
 		conn := openSocket("/ws/"+listenKey.ListenKey, nil)
 		done := make(chan bool)
@@ -281,13 +301,16 @@ func getUserDataStream(listenKey ListenKeyPayload, handler UserDataStreamHandler
 		// Fire up the data handler
 		go dataHandler(done, conn)
 
+		// Start the keepalive handler
+		go keepAliveHandler(done, listenKey)
+
 		for {
-			restartTimer := time.NewTimer(10 * time.Second)
+			restartTimer := time.NewTimer(1 * time.Minute)
 			select {
 			case <-doneChan:
 				defer conn.Close()
 				// Close data handler
-				done <- true
+				close(done)
 				log.Info("Closing user data socket connection...")
 				// Cleanly close the connection by sending a close message and then
 				// waiting (with timeout) for the server to close the connection.
@@ -297,9 +320,8 @@ func getUserDataStream(listenKey ListenKeyPayload, handler UserDataStreamHandler
 				}
 				return
 
-			case payload := <-dataChan:
-				handler.ReceiveData(payload)
-
+			case payload := <-dataStagingChan:
+				dataChan <- payload
 			case <-restartTimer.C:
 				log.Warn("no user data in 10 seconds. restarting socket")
 				failChan <- true
@@ -335,7 +357,7 @@ func getUserDataStream(listenKey ListenKeyPayload, handler UserDataStreamHandler
 	// Start up the fail handler
 	go failHandler()
 
-	return stopChan
+	return dataChan
 }
 
 func getKlineStream(stopChan <-chan bool, symbol string, interval string) <-chan KlineStreamPayload {

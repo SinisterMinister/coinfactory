@@ -269,10 +269,19 @@ type OrderCancellationRequest struct {
 }
 
 type OrderCancellationResponse struct {
-	Symbol                string `json:"symbol"`
-	OrderID               int    `json:"orderId"`
-	OriginalClientOrderID string `json:"origClientOrderId"`
-	ClientOrderID         string `json:"clientOrderId"`
+	Symbol                   string          `json:"symbol"`
+	OrderID                  int             `json:"orderId"`
+	OriginalClientOrderID    string          `json:"origClientOrderId"`
+	ClientOrderID            string          `json:"clientOrderId"`
+	TransactionTime          int64           `json:"transactTime"`
+	Price                    decimal.Decimal `json:"price"`
+	OriginalQuantity         decimal.Decimal `json:"origQty"`
+	ExecutedQuantity         decimal.Decimal `json:"executedQty"`
+	CummulativeQuoteQuantity decimal.Decimal `json:"cummulativeQuoteQty"`
+	Status                   string          `json:"status"`
+	TimeInForce              string          `json:"timeInForce"`
+	Type                     string          `json:"type"`
+	Side                     string          `json:"side"`
 }
 
 type UserDataResponse struct {
@@ -391,7 +400,7 @@ type KlineStreamData struct {
 
 type KlineStreamPayload struct {
 	Type      string          `json:"e"`
-	Timestamp int64       `json:"E"`
+	Timestamp int64           `json:"E"`
 	Symbol    string          `json:"s"`
 	KlineData KlineStreamData `json:"k"`
 }

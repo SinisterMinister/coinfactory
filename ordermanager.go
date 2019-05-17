@@ -1,7 +1,6 @@
 package coinfactory
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -198,9 +197,14 @@ func orderBuilder(req OrderRequest, ack binance.OrderResponseAckResponse) *Order
 }
 
 func (om *orderManager) UpdateOrderStatus(order *Order) error {
-	status, err := binance.GetOrderStatus(binance.OrderStatusRequest{Symbol: order.Symbol, OrderID: order.GetStatus().OrderID})
+	status, err := binance.GetOrderStatus(binance.OrderStatusRequest{Symbol: order.Symbol, OrderID: order.orderID})
 	if err != nil {
-		log.WithError(err).WithField("res", fmt.Sprintf("%+v")).Error("could not update order status")
+		if e, ok := err.(binance.ResponseError); ok {
+			body, _ := e.ResponseBodyString()
+			log.WithError(err).WithField("res", body).Error("could not update order status")
+		} else {
+			log.WithError(err).Error("could not update order status")
+		}
 		return err
 	}
 
@@ -218,6 +222,7 @@ func (om *orderManager) UpdateOrderStatus(order *Order) error {
 		default:
 			close(order.doneChan)
 		}
+	default:
 	}
 
 	return nil

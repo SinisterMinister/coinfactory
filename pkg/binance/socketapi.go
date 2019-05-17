@@ -436,7 +436,7 @@ func getKlineStream(stopChan <-chan bool, symbol string, interval string) <-chan
 		go dataHandler(done, conn)
 
 		for {
-			restartTimer := time.NewTimer(10 * time.Second)
+			restartTimer := time.NewTimer(30 * time.Second)
 			select {
 			case d := <-dataStagingChan:
 				dataChan <- d
@@ -454,7 +454,7 @@ func getKlineStream(stopChan <-chan bool, symbol string, interval string) <-chan
 				return
 
 			case <-restartTimer.C:
-				log.Warn("no kline data in 10 seconds. restarting socket")
+				log.Warn("no kline data in 30 seconds. restarting socket")
 				failChan <- true
 			}
 		}

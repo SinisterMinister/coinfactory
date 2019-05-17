@@ -1,10 +1,13 @@
 package coinfactory
 
 import (
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/sinisterminister/coinfactory/pkg/binance"
 	log "github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 
 	"github.com/shopspring/decimal"
 )
@@ -28,7 +31,8 @@ func (b *balanceManagerStreamProcessor) ProcessUserData(data binance.UserDataPay
 }
 
 type balanceManager struct {
-	wallets map[string]*walletWrapper
+	wallets        map[string]*walletWrapper
+	loggerStopChan chan bool
 }
 
 type walletWrapper struct {
@@ -50,7 +54,7 @@ var walletMux = &sync.Mutex{}
 
 func getBalanceManagerInstance() BalanceManager {
 	balanceManagerOnce.Do(func() {
-		i := &balanceManager{map[string]*walletWrapper{}}
+		i := &balanceManager{map[string]*walletWrapper{}, nil}
 		balanceManagerInstance = i
 		localBalanceManagerInstance = i
 		i.init()
@@ -75,8 +79,36 @@ func (bm *balanceManager) init() {
 
 	}
 
+	bm.loggerStopChan = make(chan bool)
+	go bm.logBalances(bm.loggerStopChan)
 	// Setup user data stream processor to handle balance managing
 	getUserDataStreamHandlerInstance().registerProcessor("coinfactory.balancemanagerprocessor", &balanceManagerStreamProcessor{})
+}
+
+func (bm *balanceManager) logBalances(done chan bool) {
+	log.Info("starting wallet logger")
+	t := time.NewTicker(30 * time.Second)
+	for {
+		select {
+		case <-done:
+			return
+		case <-t.C:
+			log.Info("logging wallet balances")
+			for _, s := range viper.GetStringSlice("watchedSymbols") {
+				w := bm.getWallet(s)
+				w.mux.Lock()
+
+				log.WithFields(log.Fields{
+					"total":    w.Free.Add(w.Locked),
+					"free":     w.Free,
+					"locked":   w.Locked,
+					"reserved": w.Reserved,
+				}).Info(w.Asset)
+
+				w.mux.Unlock()
+			}
+		}
+	}
 }
 
 func (bm *balanceManager) GetAvailableBalance(asset string) decimal.Decimal {
@@ -190,8 +222,11 @@ func (bm *balanceManager) refreshWallets() error {
 		return err
 	}
 
-	for _, w := range userData.Balances {
-		bm.wallets[w.Asset] = &walletWrapper{w, &sync.Mutex{}, decimal.Decimal{}}
+	for _, b := range userData.Balances {
+		w := bm.getWallet(b.Asset)
+		w.Asset = b.Asset
+		w.Free = b.Free
+		w.Locked = b.Locked
 	}
 
 	return nil
@@ -200,10 +235,11 @@ func (bm *balanceManager) refreshWallets() error {
 func (bm *balanceManager) getWallet(asset string) *walletWrapper {
 	walletMux.Lock()
 	defer walletMux.Unlock()
-	w, ok := bm.wallets[asset]
+
+	w, ok := bm.wallets[strings.ToUpper(asset)]
 	if !ok {
 		w = &walletWrapper{binance.WalletBalance{}, &sync.Mutex{}, decimal.Decimal{}}
-		bm.wallets[asset] = w
+		bm.wallets[strings.ToUpper(asset)] = w
 	}
 
 	return w

@@ -1,6 +1,7 @@
 package coinfactory
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -67,6 +68,7 @@ type OrderManager interface {
 	CancelOrder(order *Order) error
 	GetOpenOrders(symbol *Symbol) ([]*Order, error)
 	GetOrderDataStreamProcessor() *OrderStreamProcessor
+	UpdateOrderStatus(order *Order) error
 }
 
 // Singleton implementation of OrderManager
@@ -193,6 +195,32 @@ func orderBuilder(req OrderRequest, ack binance.OrderResponseAckResponse) *Order
 		&sync.Mutex{},
 		make(chan int),
 	}
+}
+
+func (om *orderManager) UpdateOrderStatus(order *Order) error {
+	status, err := binance.GetOrderStatus(binance.OrderStatusRequest{Symbol: order.Symbol, OrderID: order.GetStatus().OrderID})
+	if err != nil {
+		log.WithError(err).WithField("res", fmt.Sprintf("%+v")).Error("could not update order status")
+		return err
+	}
+
+	order.orderStatus = status
+	switch status.Status {
+	case "FILLED":
+		fallthrough
+	case "CANCELED":
+		fallthrough
+	case "REJECTED":
+		fallthrough
+	case "EXPIRED":
+		select {
+		case <-order.doneChan:
+		default:
+			close(order.doneChan)
+		}
+	}
+
+	return nil
 }
 
 func (om *orderManager) updateOrderStatusFromStreamProcessor(data binance.OrderUpdatePayload) {

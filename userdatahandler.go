@@ -53,7 +53,7 @@ func (handler *userDataStreamHandler) stop() {
 	log.Warn("Stopping user data stream handler")
 	defer log.Warn("User data stream handler stopped")
 	// Kill the handler
-	handler.streamDoneChannel <- true
+	close(handler.streamDoneChannel)
 
 	for _, p := range handler.processors {
 		p.kill()

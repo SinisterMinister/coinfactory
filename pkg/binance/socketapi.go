@@ -79,15 +79,25 @@ func getCombinedTickerStream(symbols []string, handler TickersStreamHandler) cha
 				if err != nil {
 					// Something bad happened. Time to bail and try again
 					log.WithError(err).Error(err)
-					failChan <- true
-					return
+					select {
+					case <-done:
+						return
+					default:
+						failChan <- true
+						return
+					}
 				}
 
 				log.WithField("raw paylaod", fmt.Sprintf("%s", message)).Debug("Received combined ticker stream data")
 				if err := json.Unmarshal(message, &payload); err != nil {
 					log.WithError(err).Error("could not receive combined ticker stream data")
-					failChan <- true
-					return
+					select {
+					case <-done:
+						return
+					default:
+						failChan <- true
+						return
+					}
 				}
 
 				var data []SymbolTickerData
@@ -100,7 +110,7 @@ func getCombinedTickerStream(symbols []string, handler TickersStreamHandler) cha
 	}
 
 	// Handler closure wrapped in a goroutine
-	socketHandler := func() {
+	socketHandler := func(doneChan chan bool) {
 		// Open the websocket
 		conn := openSocket(url, query)
 		done := make(chan bool)
@@ -139,10 +149,12 @@ func getCombinedTickerStream(symbols []string, handler TickersStreamHandler) cha
 			select {
 			case <-failChan:
 				// Send a done to stop the routine
-				doneChan <- true
+				close(doneChan)
+
+				doneChan = make(chan bool)
 
 				// Restart the routine
-				go socketHandler()
+				go socketHandler(doneChan)
 			case <-stopChan:
 				// Send a done to stop the routine
 				doneChan <- true
@@ -157,7 +169,7 @@ func getCombinedTickerStream(symbols []string, handler TickersStreamHandler) cha
 	}
 
 	// Start up the routine
-	go socketHandler()
+	go socketHandler(doneChan)
 	// Start up the fail handler
 	go failHandler()
 
@@ -228,7 +240,7 @@ func getAllMarketTickersStream(handler TickersStreamHandler) chan bool {
 }
 
 func getUserDataStream(stopChan <-chan bool) <-chan UserDataPayload {
-	// Channel used to exit the handler
+	// Channel used to exit the handler the first time
 	doneChan := make(chan bool)
 	// Channel for staging data to send
 	dataStagingChan := make(chan UserDataPayload)
@@ -236,8 +248,6 @@ func getUserDataStream(stopChan <-chan bool) <-chan UserDataPayload {
 	dataChan := make(chan UserDataPayload)
 	// Channel for failure capture
 	failChan := make(chan bool)
-	// Intercept the interrupt signal and pass it along
-	interrupt := make(chan os.Signal, 1)
 
 	dataHandler := func(done <-chan bool, conn *websocket.Conn) {
 		// Loop forever over the stream
@@ -253,14 +263,19 @@ func getUserDataStream(stopChan <-chan bool) <-chan UserDataPayload {
 				_, message, err := conn.ReadMessage()
 				if err != nil {
 					// Something bad happened. Time to bail and try again
-					log.WithError(err).Error(err)
-					failChan <- true
-					return
+					log.WithError(err).Error("could not receive user data")
+					select {
+					case <-done:
+						return
+					default:
+						failChan <- true
+						return
+					}
 				}
 
 				log.WithField("raw paylaod", fmt.Sprintf("%s", message)).Debug("Received user data payload")
 				if err := json.Unmarshal(message, &payload); err != nil {
-					log.WithError(err).Error("could not receive user data")
+					log.WithError(err).Error("could not parse user data")
 					failChan <- true
 					return
 				}
@@ -285,7 +300,7 @@ func getUserDataStream(stopChan <-chan bool) <-chan UserDataPayload {
 	}
 
 	// Handler closure wrapped in a goroutine
-	socketHandler := func() {
+	socketHandler := func(doneChan chan bool) {
 		// Fetch a listen key first
 		listenKey, err := CreateUserDataStream()
 		if err != nil {
@@ -323,7 +338,7 @@ func getUserDataStream(stopChan <-chan bool) <-chan UserDataPayload {
 			case payload := <-dataStagingChan:
 				dataChan <- payload
 			case <-restartTimer.C:
-				log.Warn("no user data in 10 seconds. restarting socket")
+				log.Warn("no user data in 1 minute. restarting socket")
 				failChan <- true
 			}
 
@@ -335,17 +350,15 @@ func getUserDataStream(stopChan <-chan bool) <-chan UserDataPayload {
 			select {
 			case <-failChan:
 				// Send a done to stop the routine
-				doneChan <- true
+				close(doneChan)
+
+				// Channel used to exit the handler
+				doneChan = make(chan bool)
 
 				// Restart the routine
-				go socketHandler()
+				go socketHandler(doneChan)
 			case <-stopChan:
 				// Send a done to stop the routine
-				doneChan <- true
-				return
-
-			case <-interrupt:
-				log.Println("interrupt")
 				doneChan <- true
 				return
 			}
@@ -353,7 +366,7 @@ func getUserDataStream(stopChan <-chan bool) <-chan UserDataPayload {
 	}
 
 	// Start up the routine
-	go socketHandler()
+	go socketHandler(doneChan)
 	// Start up the fail handler
 	go failHandler()
 
@@ -390,8 +403,13 @@ func getKlineStream(stopChan <-chan bool, symbol string, interval string) <-chan
 				if err != nil {
 					// Something bad happened. Time to bail and try again
 					log.WithError(err).Error(err)
-					failChan <- true
-					return
+					select {
+					case <-done:
+						return
+					default:
+						failChan <- true
+						return
+					}
 				}
 
 				log.WithField("raw paylaod", fmt.Sprintf("%s", message)).Debug("Received kline stream data")
@@ -409,7 +427,7 @@ func getKlineStream(stopChan <-chan bool, symbol string, interval string) <-chan
 	}
 
 	// Handler closure wrapped in a goroutine
-	socketHandler := func() {
+	socketHandler := func(doneChan <-chan bool) {
 		// Open the websocket
 		conn := openSocket(url, nil)
 		done := make(chan bool)
@@ -447,10 +465,13 @@ func getKlineStream(stopChan <-chan bool, symbol string, interval string) <-chan
 			select {
 			case <-failChan:
 				// Send a done to stop the routine
-				doneChan <- true
+				close(doneChan)
+
+				// Channel used to exit the handler
+				doneChan = make(chan bool)
 
 				// Restart the routine
-				go socketHandler()
+				go socketHandler(doneChan)
 			case <-stopChan:
 				// Send a done to stop the routine
 				doneChan <- true
@@ -465,7 +486,7 @@ func getKlineStream(stopChan <-chan bool, symbol string, interval string) <-chan
 	}
 
 	// Start up the routine
-	go socketHandler()
+	go socketHandler(doneChan)
 	// Start up the fail handler
 	go failHandler()
 

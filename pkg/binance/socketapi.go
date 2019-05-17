@@ -91,13 +91,8 @@ func getCombinedTickerStream(symbols []string, handler TickersStreamHandler) cha
 				log.WithField("raw paylaod", fmt.Sprintf("%s", message)).Debug("Received combined ticker stream data")
 				if err := json.Unmarshal(message, &payload); err != nil {
 					log.WithError(err).Error("could not receive combined ticker stream data")
-					select {
-					case <-done:
-						return
-					default:
-						failChan <- true
-						return
-					}
+					failChan <- true
+					return
 				}
 
 				var data []SymbolTickerData
@@ -123,8 +118,8 @@ func getCombinedTickerStream(symbols []string, handler TickersStreamHandler) cha
 			select {
 			case <-doneChan:
 				defer conn.Close()
+				close(done)
 				// Close the data handler
-				done <- true
 				log.Info("Closing combined ticker stream socket connection...")
 				// Cleanly close the connection by sending a close message and then
 				// waiting (with timeout) for the server to close the connection.
@@ -415,8 +410,13 @@ func getKlineStream(stopChan <-chan bool, symbol string, interval string) <-chan
 				log.WithField("raw paylaod", fmt.Sprintf("%s", message)).Debug("Received kline stream data")
 				if err := json.Unmarshal(message, &payload); err != nil {
 					log.WithError(err).Error("could not receive kline stream data")
-					failChan <- true
-					return
+					select {
+					case <-done:
+						return
+					default:
+						failChan <- true
+						return
+					}
 				}
 
 				// Pass the data to the handler
@@ -443,7 +443,7 @@ func getKlineStream(stopChan <-chan bool, symbol string, interval string) <-chan
 
 			case <-doneChan:
 				defer conn.Close()
-				done <- true
+				close(done)
 				log.Info("Closing kline stream socket connection...")
 				// Cleanly close the connection by sending a close message and then
 				// waiting (with timeout) for the server to close the connection.

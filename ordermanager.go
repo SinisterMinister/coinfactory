@@ -245,7 +245,11 @@ func (om *orderManager) updateOrderStatusFromStreamProcessor(data binance.OrderU
 		case "EXPIRED":
 			om.openOrdersMux.Lock()
 			delete(om.openOrders, data.OrderID)
-			close(order.doneChan)
+			select {
+			default:
+				close(order.doneChan)
+			case <-order.doneChan:
+			}
 			om.openOrdersMux.Unlock()
 		}
 		// Build an order status

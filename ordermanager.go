@@ -72,10 +72,13 @@ type OrderManager interface {
 
 // Singleton implementation of OrderManager
 type orderManager struct {
-	openOrders    map[int]*Order
-	lastSeenTrade map[string]int
-	orderLogger   OrderLogger
-	openOrdersMux *sync.Mutex
+	openOrders     map[int]*Order
+	lastSeenTrade  map[string]int
+	orderLogger    OrderLogger
+	openOrdersMux  *sync.Mutex
+	ordersThisTick int
+	tickMux        *sync.Mutex
+	tickChan       chan bool
 }
 
 var instance OrderManager
@@ -87,9 +90,12 @@ func getOrderManagerInstance() OrderManager {
 			openOrders:    map[int]*Order{},
 			lastSeenTrade: map[string]int{},
 			openOrdersMux: &sync.Mutex{},
+			tickMux:       &sync.Mutex{},
+			tickChan:      make(chan bool),
 		}
 
 		i.startOrderStreamWatcher()
+		i.startTicker()
 		instance = i
 	})
 
@@ -125,6 +131,12 @@ func (om *orderManager) AttemptOrder(order OrderRequest) (*Order, error) {
 		return nil, err
 	}
 
+	// Throttle requests to 10TPS
+	if om.getTickOrderCount() >= 9 {
+		<-om.getNextTickChan()
+	}
+	om.incrementTickOrderCount()
+
 	res, err := binance.PlaceOrderGetAck(req)
 	if err != nil {
 		log.WithError(err).Debug("Order attempt failed!")
@@ -135,6 +147,42 @@ func (om *orderManager) AttemptOrder(order OrderRequest) (*Order, error) {
 	om.openOrders[res.OrderID] = orderBuilder(order, res)
 
 	return om.openOrders[res.OrderID], nil
+}
+
+func (om *orderManager) incrementTickOrderCount() {
+	om.tickMux.Lock()
+	defer om.tickMux.Unlock()
+	om.ordersThisTick++
+}
+
+func (om *orderManager) getTickOrderCount() int {
+	om.tickMux.Lock()
+	defer om.tickMux.Unlock()
+	return om.ordersThisTick
+}
+
+func (om *orderManager) nextTick() {
+	om.tickMux.Lock()
+	defer om.tickMux.Unlock()
+	om.ordersThisTick = 0
+	close(om.tickChan)
+	om.tickChan = make(chan bool)
+}
+
+func (om *orderManager) getNextTickChan() <-chan bool {
+	om.tickMux.Lock()
+	defer om.tickMux.Unlock()
+	return om.tickChan
+}
+
+func (om *orderManager) startTicker() {
+	go func() {
+		ticker := time.NewTicker(1 * time.Second)
+		for {
+			<-ticker.C
+			om.nextTick()
+		}
+	}()
 }
 
 func (om *orderManager) AttemptTestOrder(order OrderRequest) error {
@@ -197,11 +245,15 @@ func orderBuilder(req OrderRequest, ack binance.OrderResponseAckResponse) *Order
 }
 
 func (om *orderManager) UpdateOrderStatus(order *Order) error {
+	order.mux.Lock()
+	defer order.mux.Unlock()
 	status, err := binance.GetOrderStatus(binance.OrderStatusRequest{Symbol: order.Symbol, OrderID: order.orderID})
 	if err != nil {
 		if e, ok := err.(binance.ResponseError); ok {
 			body, _ := e.ResponseBodyString()
-			log.WithError(err).WithField("res", body).Error("could not update order status")
+			log.WithError(err).WithField("res", body).WithFields(log.Fields{
+				"orderId": order.orderID,
+			}).Error("could not update order status")
 		} else {
 			log.WithError(err).Error("could not update order status")
 		}

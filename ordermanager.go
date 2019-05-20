@@ -78,7 +78,7 @@ type orderManager struct {
 	openOrdersMux  *sync.Mutex
 	ordersThisTick int
 	tickMux        *sync.Mutex
-	tickChan       chan bool
+	tickWaitChan   chan bool
 }
 
 var instance OrderManager
@@ -90,12 +90,12 @@ func getOrderManagerInstance() OrderManager {
 			openOrders:    map[int]*Order{},
 			lastSeenTrade: map[string]int{},
 			openOrdersMux: &sync.Mutex{},
+			tickWaitChan:  make(chan bool),
 			tickMux:       &sync.Mutex{},
-			tickChan:      make(chan bool),
 		}
 
-		i.startOrderStreamWatcher()
 		i.startTicker()
+		i.startOrderStreamWatcher()
 		instance = i
 	})
 
@@ -132,8 +132,8 @@ func (om *orderManager) AttemptOrder(order OrderRequest) (*Order, error) {
 	}
 
 	// Throttle requests to 10TPS
-	if om.getTickOrderCount() >= 9 {
-		<-om.getNextTickChan()
+	if om.getTickOrderCount() >= 10 {
+		<-om.tickWaitChan
 	}
 	om.incrementTickOrderCount()
 
@@ -165,17 +165,12 @@ func (om *orderManager) nextTick() {
 	om.tickMux.Lock()
 	defer om.tickMux.Unlock()
 	om.ordersThisTick = 0
-	close(om.tickChan)
-	om.tickChan = make(chan bool)
-}
-
-func (om *orderManager) getNextTickChan() <-chan bool {
-	om.tickMux.Lock()
-	defer om.tickMux.Unlock()
-	return om.tickChan
+	close(om.tickWaitChan)
+	om.tickWaitChan = make(chan bool)
 }
 
 func (om *orderManager) startTicker() {
+	om.nextTick()
 	go func() {
 		ticker := time.NewTicker(1 * time.Second)
 		for {
@@ -247,6 +242,13 @@ func orderBuilder(req OrderRequest, ack binance.OrderResponseAckResponse) *Order
 func (om *orderManager) UpdateOrderStatus(order *Order) error {
 	order.mux.Lock()
 	defer order.mux.Unlock()
+	lastUpdate := time.Unix(0, int64(order.orderStatus.LastUpdated)*int64(time.Millisecond))
+
+	// Only update if it hasn't been done in the past minute
+	if order.orderStatus.LastUpdated != 0 && time.Since(lastUpdate).Minutes() < 1 {
+		return nil
+	}
+
 	status, err := binance.GetOrderStatus(binance.OrderStatusRequest{Symbol: order.Symbol, OrderID: order.orderID})
 	if err != nil {
 		if e, ok := err.(binance.ResponseError); ok {

@@ -87,12 +87,12 @@ func DeleteUserDataStream(payload ListenKeyPayload) error {
 	return deleteUserDataStream(payload)
 }
 
-func GetAllMarketTickersStream(handler TickersStreamHandler) chan bool {
-	return getAllMarketTickersStream(handler)
+func GetAllMarketTickersStream(stopChan <-chan bool) <-chan []SymbolTickerData {
+	return getAllMarketTickersStream(stopChan)
 }
 
-func GetCombinedTickerStream(symbols []string, handler TickersStreamHandler) chan<- bool {
-	return getCombinedTickerStream(symbols, handler)
+func GetCombinedTickerStream(stopChan <-chan bool, symbols []string) <-chan []SymbolTickerData {
+	return getCombinedTickerStream(stopChan, symbols)
 }
 
 func GetUserDataStream(stopChan <-chan bool) <-chan UserDataPayload {

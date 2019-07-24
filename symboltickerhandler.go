@@ -5,19 +5,18 @@ import (
 	"sync"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/sinisterminister/coinfactory/pkg/binance"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
 
 type symbolStreamProcessorWrapper struct {
+	symbol      string
 	processor   SymbolStreamProcessor
-	dataChannel chan binance.SymbolTickerData
 	quitChannel chan bool
 }
 
 func (wrapper *symbolStreamProcessorWrapper) kill() {
-	wrapper.quitChannel <- true
+	close(wrapper.quitChannel)
 }
 
 // symbolTickerStreamHandler
@@ -25,7 +24,7 @@ type symbolTickerStreamHandler struct {
 	processors       map[string]symbolStreamProcessorWrapper
 	processorFactory SymbolStreamProcessorFactory
 	mux              *sync.Mutex
-	doneChannel      chan<- bool
+	doneChannel      chan bool
 }
 
 func (handler *symbolTickerStreamHandler) start() {
@@ -37,8 +36,6 @@ func (handler *symbolTickerStreamHandler) start() {
 		log.Info("Config updated. Refreshing processors")
 		handler.refreshProcessors()
 	})
-
-	handler.doneChannel = binance.GetCombinedTickerStream(fetchWatchedSymbols(), handler)
 }
 
 func (handler *symbolTickerStreamHandler) stop() {
@@ -52,28 +49,17 @@ func (handler *symbolTickerStreamHandler) stop() {
 	}
 }
 
-// ReceiveData takes the payload from the stream and forwards it to the correct processor
-func (handler *symbolTickerStreamHandler) ReceiveData(payload []binance.SymbolTickerData) {
-	for _, sym := range payload {
-		handler.mux.Lock()
-		if proc, ok := handler.processors[sym.Symbol]; ok {
-			proc.dataChannel <- sym
-		}
-		handler.mux.Unlock()
-	}
-}
-
-func (hanlder *symbolTickerStreamHandler) refreshProcessors() {
+func (handler *symbolTickerStreamHandler) refreshProcessors() {
 	// Fetch eligible symbols
 	symbols := fetchWatchedSymbols()
 
 	// Lock down everything
-	hanlder.mux.Lock()
-	defer hanlder.mux.Unlock()
+	handler.mux.Lock()
+	defer handler.mux.Unlock()
 
 	// Remove any uncalled for processors
 filterLoop:
-	for s, p := range hanlder.processors {
+	for s, p := range handler.processors {
 		for _, sym := range symbols {
 			if strings.Contains(sym, s) {
 				continue filterLoop
@@ -81,31 +67,30 @@ filterLoop:
 		}
 		log.Info("Processor for " + s + " is exiting")
 		p.kill()
-		delete(hanlder.processors, s)
+		delete(handler.processors, s)
 	}
 
 	// Create any missing processors
 	for _, s := range symbols {
-		if _, ok := hanlder.processors[s]; !ok {
+		if _, ok := handler.processors[s]; !ok {
 			// Start the processor
 			symbol, err := GetSymbolService().GetSymbol(s)
 			if err != nil {
 				continue
 			}
-			proc := hanlder.processorFactory(symbol)
+			proc := handler.processorFactory(symbol)
 
 			log.Info("Processor for " + s + " is starting")
-			hanlder.processors[s] = newSymbolStreamProcessorWrapper(proc)
+			handler.processors[s] = newSymbolStreamProcessorWrapper(proc, s)
 		}
 	}
 }
 
-func newSymbolStreamProcessorWrapper(processor SymbolStreamProcessor) symbolStreamProcessorWrapper {
-	dc := make(chan binance.SymbolTickerData)
+func newSymbolStreamProcessorWrapper(processor SymbolStreamProcessor, symbol string) symbolStreamProcessorWrapper {
 	qc := make(chan bool)
 	wrapper := symbolStreamProcessorWrapper{
+		symbol:      symbol,
 		processor:   processor,
-		dataChannel: dc,
 		quitChannel: qc,
 	}
 
@@ -117,9 +102,10 @@ func newSymbolStreamProcessorWrapper(processor SymbolStreamProcessor) symbolStre
 func (wrapper *symbolStreamProcessorWrapper) start() {
 	// Launch the goroutine
 	go func() {
+		dataChannel := getTickerStreamService().GetTickerStream(wrapper.quitChannel, wrapper.symbol)
 		for {
 			select {
-			case data := <-wrapper.dataChannel:
+			case data := <-dataChannel:
 				wrapper.processor.ProcessData(data)
 			case <-wrapper.quitChannel:
 				return

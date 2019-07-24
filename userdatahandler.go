@@ -14,7 +14,11 @@ type userDataStreamProcessorWrapper struct {
 }
 
 func (wrapper *userDataStreamProcessorWrapper) kill() {
-	wrapper.quitChannel <- true
+	select {
+	case <-wrapper.quitChannel:
+	default:
+		close(wrapper.quitChannel)
+	}
 }
 
 type userDataStreamHandler struct {
@@ -27,11 +31,13 @@ var udshOnce = sync.Once{}
 var usdhInstance *userDataStreamHandler
 
 func (handler *userDataStreamHandler) start() {
-	log.Info("Starting user data stream handler")
+	if handler.streamDoneChannel == nil {
+		log.Info("Starting user data stream handler")
 
-	// Make done channel
-	handler.streamDoneChannel = make(chan bool)
-	go handler.processDataStream(handler.streamDoneChannel, binance.GetUserDataStream(handler.streamDoneChannel))
+		// Make done channel
+		handler.streamDoneChannel = make(chan bool)
+		go handler.processDataStream(handler.streamDoneChannel, binance.GetUserDataStream(handler.streamDoneChannel))
+	}
 }
 
 func (handler *userDataStreamHandler) processDataStream(doneChan <-chan bool, dataChan <-chan binance.UserDataPayload) {
@@ -55,6 +61,7 @@ func (handler *userDataStreamHandler) stop() {
 	// Kill the handler
 	close(handler.streamDoneChannel)
 
+	log.Warn("Killing user data stream processors")
 	for _, p := range handler.processors {
 		p.kill()
 	}

@@ -456,13 +456,6 @@ func getUserDataStream(stopChan <-chan bool) <-chan UserDataPayload {
 	// Start up the fail handler
 	go failHandler(doneChan, stopChan)
 
-	go func(stopChan <-chan bool) {
-		select {
-		case <-stopChan:
-			log.Warn("Stop channel has closed!")
-		}
-	}(stopChan)
-
 	return dataChan
 }
 

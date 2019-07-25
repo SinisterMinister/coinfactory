@@ -9,17 +9,17 @@ import (
 const appName = "coinfactory"
 
 type Coinfactory struct {
-	udHandler       *userDataStreamHandler
-	tickerStreamSvc *tickerStreamService
+	userDataStreamSvc *userDataStreamService
+	tickerStreamSvc   *tickerStreamService
 }
 
 func (cf *Coinfactory) Start() {
-	go cf.udHandler.start()
+	go cf.userDataStreamSvc.start()
 	go cf.tickerStreamSvc.start()
 }
 
 func (cf *Coinfactory) Shutdown() {
-	cf.udHandler.stop()
+	cf.userDataStreamSvc.stop()
 	cf.tickerStreamSvc.stop()
 }
 
@@ -35,9 +35,13 @@ func (cf *Coinfactory) GetTickerStreamService() TickerStreamService {
 	return getTickerStreamService()
 }
 
+func (cf *Coinfactory) GetUserDataStreamService() UserDataStreamService {
+	return getUserDataStreamService()
+}
+
 func NewCoinFactory() Coinfactory {
 	// getBalanceManagerInstance()
-	return Coinfactory{getUserDataStreamHandlerInstance(), getTickerStreamService()}
+	return Coinfactory{getUserDataStreamService(), getTickerStreamService()}
 }
 
 func init() {

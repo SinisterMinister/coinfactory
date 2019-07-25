@@ -67,16 +67,16 @@ func (tss *tickerStreamService) registerChannel(symbol string, dataChan chan bin
 		tss.tickersMutex.Unlock()
 	}
 
+	tss.tickersMutex.Lock()
+	tss.tickers[symbol] = append(tss.tickers[symbol], dataChan)
+	tss.tickersMutex.Unlock()
+
 	// Refresh the connection if we're running
 	tss.runningMutex.RLock()
 	if tss.running {
 		tss.refreshConnection()
 	}
 	tss.runningMutex.RUnlock()
-
-	tss.tickersMutex.Lock()
-	tss.tickers[symbol] = append(tss.tickers[symbol], dataChan)
-	tss.tickersMutex.Unlock()
 }
 
 func (tss *tickerStreamService) deregisterChannel(symbol string, dataChan chan binance.SymbolTickerData) {

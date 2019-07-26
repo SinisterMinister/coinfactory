@@ -27,8 +27,8 @@ func (cf *Coinfactory) GetBalanceManager() BalanceManager {
 	return getBalanceManagerInstance()
 }
 
-func (cf *Coinfactory) GetOrderManager() OrderManager {
-	return getOrderManagerInstance()
+func (cf *Coinfactory) GetOrderService() OrderService {
+	return getOrderService()
 }
 
 func (cf *Coinfactory) GetTickerStreamService() TickerStreamService {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -197,6 +198,11 @@ type CombinedTickerStreamPayload struct {
 	Data       SymbolTickerData `json:"data"`
 }
 
+type CombinedKlineStreamPayload struct {
+	StreamName string             `json:"stream"`
+	Data       KlineStreamPayload `json:"data"`
+}
+
 type OrderRequest struct {
 	Symbol          string          `json:"symbol"`
 	Side            string          `json:"side"`
@@ -377,6 +383,15 @@ func (k *Kline) UnmarshalJSON(b []byte) error {
 	k.TakerQuoteVolume, err = decimal.NewFromString(tmp.([]interface{})[10].(string))
 
 	return err
+}
+
+type KlineSymbolInterval struct {
+	Symbol   string
+	Interval string
+}
+
+func (ksi *KlineSymbolInterval) GetStreamName() string {
+	return strings.ToLower(ksi.Symbol) + "@kline_" + ksi.Interval
 }
 
 type KlineStreamData struct {

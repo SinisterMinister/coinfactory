@@ -459,7 +459,7 @@ func getUserDataStream(stopChan <-chan bool) <-chan UserDataPayload {
 	return dataChan
 }
 
-func getKlineStream(stopChan <-chan bool, symbol string, interval string) <-chan KlineStreamPayload {
+func getKlineStream(stopChan <-chan bool, ksi KlineSymbolInterval) <-chan KlineStreamPayload {
 	// Channel used to exit the handler
 	doneChan := make(chan bool)
 	// Channel for staging data to send
@@ -472,7 +472,7 @@ func getKlineStream(stopChan <-chan bool, symbol string, interval string) <-chan
 	interrupt := make(chan os.Signal, 1)
 
 	// We need to generate the URL based on the requested symbol
-	url := "/ws/" + strings.ToLower(symbol) + "@kline_" + interval
+	url := "/ws/" + strings.ToLower(ksi.Symbol) + "@kline_" + ksi.Interval
 
 	dataHandler := func(done <-chan bool, conn *websocket.Conn) {
 		// Loop forever over the stream
@@ -570,6 +570,140 @@ func getKlineStream(stopChan <-chan bool, symbol string, interval string) <-chan
 
 			case <-interrupt:
 				log.Println("interrupt")
+				close(doneChan)
+				return
+			}
+		}
+	}
+
+	// Start up the routine
+	go socketHandler(doneChan)
+	// Start up the fail handler
+	go failHandler(doneChan)
+
+	return dataChan
+}
+
+func getCombinedKlineStream(stopChan <-chan bool, ksis []KlineSymbolInterval) <-chan []KlineStreamPayload {
+	// Channel used to exit the handler
+	doneChan := make(chan bool)
+	// Channel for staging data to send
+	dataStagingChan := make(chan []KlineStreamPayload)
+	// Channel used to move data
+	dataChan := make(chan []KlineStreamPayload)
+	// Channel for failure capture
+	failChan := make(chan bool)
+
+	// We need to generate the URL based on the requested symbols
+	var path []string
+	for _, s := range ksis {
+		// Add the stream names
+		path = append(path, s.GetStreamName())
+	}
+
+	url := "/stream"
+	query := make(map[string]string)
+
+	query["streams"] = strings.Join(path, "/")
+
+	dataHandler := func(done <-chan bool, conn *websocket.Conn) {
+		// Loop forever over the stream
+		for {
+			select {
+			case <-done:
+				return
+			default:
+			}
+
+			select {
+			case <-done:
+				return
+			default:
+				// Create a container for the data
+				var payload CombinedKlineStreamPayload
+
+				// Read the data and handle any errors
+				_, message, err := conn.ReadMessage()
+				if err != nil {
+					// Something bad happened. Time to bail and try again
+					log.WithError(err).Error(err)
+					select {
+					case <-done:
+						return
+					default:
+						failChan <- true
+						return
+					}
+				}
+
+				log.WithField("raw paylaod", fmt.Sprintf("%s", message)).Debug("Received combined kline stream data")
+				if err := json.Unmarshal(message, &payload); err != nil {
+					log.WithError(err).Error("could not receive combined kline stream data")
+					failChan <- true
+					return
+				}
+
+				var data []KlineStreamPayload
+				data = append(data, payload.Data)
+
+				// Pass the data to the handler
+				dataStagingChan <- data
+			}
+		}
+	}
+
+	// Handler closure wrapped in a goroutine
+	socketHandler := func(doneChan <-chan bool) {
+		// Open the websocket
+		conn := openSocket(url, query)
+		done := make(chan bool)
+
+		// Fire up the data handler
+		go dataHandler(done, conn)
+
+		for {
+			restartTimer := time.NewTimer(10 * time.Second)
+			select {
+			case <-doneChan:
+				defer conn.Close()
+				close(done)
+
+				// Wait for the connection to finish reading
+				time.Sleep(2 * time.Second)
+
+				// Close the data handler
+				log.Warn("Closing combined kline stream socket connection...")
+				// Cleanly close the connection by sending a close message and then
+				// waiting (with timeout) for the server to close the connection.
+				err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+				if err != nil {
+					log.Error(err)
+				}
+				return
+
+			case data := <-dataStagingChan:
+				dataChan <- data
+
+			case <-restartTimer.C:
+				log.Warn("no combined kline stream data in 10 seconds. restarting socket")
+				failChan <- true
+			}
+		}
+	}
+
+	failHandler := func(doneChan chan bool) {
+		for {
+			select {
+			case <-failChan:
+				// Send a done to stop the routine
+				close(doneChan)
+
+				doneChan = make(chan bool)
+
+				// Restart the routine
+				go socketHandler(doneChan)
+			case <-stopChan:
+				// Send a done to stop the routine
 				close(doneChan)
 				return
 			}

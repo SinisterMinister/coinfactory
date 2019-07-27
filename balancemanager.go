@@ -77,15 +77,20 @@ func (bm *balanceManager) init() {
 }
 
 func (bm *balanceManager) start() {
-	// NOOP
+	bm.updateMutex.Lock()
+	defer bm.updateMutex.Unlock()
+
+	bm.updateStopChan = make(chan bool)
 }
 
 func (bm *balanceManager) stop() {
 	bm.updateMutex.Lock()
 	defer bm.updateMutex.Unlock()
-
-	close(bm.updateStopChan)
-	bm.updateStopChan = make(chan bool)
+	select {
+	default:
+		close(bm.updateStopChan)
+	case <-bm.updateStopChan:
+	}
 }
 
 func (bm *balanceManager) logBalances(done chan bool) {

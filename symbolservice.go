@@ -1,90 +1,45 @@
 package coinfactory
 
 import (
-	"errors"
 	"sync"
 
 	"github.com/sinisterminister/coinfactory/pkg/binance"
-	log "github.com/sirupsen/logrus"
 )
 
 type SymbolService interface {
-	GetSymbol(symbol string) (*Symbol, error)
+	GetSymbol(symbol string) *Symbol
 }
 
 type symbolService struct {
-	symbols                 map[string]*Symbol
-	tickerStreamInitialized chan bool
-	tickerStreamDone        chan<- bool
+	symbolStopChan chan bool
 }
 
 var (
-	symbolServiceOnce        sync.Once
-	symbolServiceInstance    *symbolService
-	symbolServiceInitialized = false
+	symbolServiceOnce     sync.Once
+	symbolServiceInstance *symbolService
 )
 
-func (s *symbolService) GetSymbol(symbol string) (*Symbol, error) {
-	ret, ok := s.symbols[symbol]
-	if !ok {
-		return &Symbol{}, errors.New("symbol does not exist")
-	}
-
-	return ret, nil
-}
-
-func (s *symbolService) initializeSymbols() {
-	s.symbols = make(map[string]*Symbol)
-
-	rawSymbols := binance.GetSymbols()
-	for k, v := range rawSymbols {
-		s.symbols[k] = &Symbol{v, binance.SymbolTickerData{}, nil, "", nil}
-	}
-}
-
-func (s *symbolService) ReceiveData(data []binance.SymbolTickerData) {
-	// Update symbols
-	for _, ticker := range data {
-		symbol, err := s.GetSymbol(ticker.Symbol)
-		if err != nil {
-			log.WithField("ticker", ticker).WithError(err).Error("SymbolService: could not update ticker")
-			continue
-		}
-		symbol.Ticker = ticker
-	}
-	if !symbolServiceInitialized {
-		s.tickerStreamInitialized <- true
-	}
-}
-
-func (s *symbolService) startTickerStream() {
-	s.tickerStreamInitialized = make(chan bool)
-	s.tickerStreamDone = binance.GetCombinedTickerStream(fetchWatchedSymbols(), s)
-	symbolServiceInitialized = <-s.tickerStreamInitialized
+func (s *symbolService) GetSymbol(symbol string) *Symbol {
+	return newSymbol(binance.GetSymbol(symbol), s.symbolStopChan)
 }
 
 func (s *symbolService) start() {
-	log.Info("Starting symbol service")
-	defer log.Info("Symbol service started successfully")
-	s.initializeSymbols()
-	s.startTickerStream()
-
+	// NOOP
 }
 
 func (s *symbolService) stop() {
-	log.Warn("Stopping symbol service")
-	defer log.Warn("Symbol service stopped")
-	// Kill the handler
-	s.tickerStreamDone <- true
-	symbolServiceInitialized = false
+	// Close the ticker streams for the all the various symbols
+	select {
+	default:
+		close(s.symbolStopChan)
+	case <-s.symbolStopChan:
+	}
 }
 
-func GetSymbolService() SymbolService {
+func getSymbolService() *symbolService {
 	symbolServiceOnce.Do(func() {
-		if !symbolServiceInitialized {
-			symbolServiceInstance = &symbolService{}
-			symbolServiceInstance.start()
-			symbolServiceInitialized = true
+		symbolServiceInstance = &symbolService{
+			symbolStopChan: make(chan bool),
 		}
 	})
 

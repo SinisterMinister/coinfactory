@@ -3,32 +3,35 @@ package main
 import (
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/sinisterminister/coinfactory"
-	"github.com/sinisterminister/coinfactory/pkg/binance"
 	log "github.com/sirupsen/logrus"
 )
 
-// LoggerSymbolTickerStreamProcessor implements the SymbolStreamProcessor interface.
-type LoggerSymbolTickerStreamProcessor struct{}
-
-// ProcessData takes the data from Binance's 24hr symbol ticker stream and logs the watched symbol's data to the command line.
-func (processor *LoggerSymbolTickerStreamProcessor) ProcessData(data binance.SymbolTickerData) {
-	log.WithFields(log.Fields{
-		"data": data,
-	}).Info("Ticker for " + data.Symbol)
-}
-
-// processorFactory implements the SymbolStreamProcessorFactory contract which allows Coinfactory to
-// create processors for each symbol
-func processorFactory(symbol *coinfactory.Symbol) coinfactory.SymbolStreamProcessor {
-	proc := LoggerSymbolTickerStreamProcessor{}
-	return &proc
-}
-
 func main() {
-	cf := coinfactory.NewCoinFactory(processorFactory)
-	cf.Start()
+	// Make the kill switch for the various streams
+	killSwitch := make(chan bool)
+
+	// Create a list of markets to log
+	markets := []string{
+		"BTCUSDT",
+		"ETHUSDT",
+		"XRPUSDT",
+	}
+
+	// Create a processor for each ticker and kline stream
+	for _, s := range markets {
+		symbol := coinfactory.GetSymbolService().GetSymbol(s)
+		go tickerProcessor(killSwitch, symbol)
+
+		// Log kline stream
+		go klineProcessor(killSwitch, symbol)
+	}
+
+	// Let things get warmed up first
+	time.Sleep(2 * time.Second)
+	coinfactory.Start()
 
 	// Intercept the interrupt signal and pass it along
 	interrupt := make(chan os.Signal, 1)
@@ -36,6 +39,62 @@ func main() {
 
 	select {
 	case <-interrupt:
-		cf.Stop()
+		// Kill the streams
+		close(killSwitch)
+
+		// Shutdown coinfactory
+		coinfactory.Shutdown()
+	}
+}
+
+func tickerProcessor(killSwitch <-chan bool, symbol *coinfactory.Symbol) {
+	log.Infof("Starting processor for %s market", symbol.Symbol)
+	tickerStream := symbol.GetTickerStream(killSwitch)
+
+	for {
+		// Bail on the kill switch
+		select {
+		case <-killSwitch:
+			return
+		default:
+		}
+
+		// Handle the data
+		select {
+		case data := <-tickerStream:
+			log.WithFields(log.Fields{
+				"data": data,
+			}).Info("Ticker for " + data.Symbol)
+
+		// Bail on the kill switch
+		case <-killSwitch:
+			return
+		}
+	}
+}
+
+func klineProcessor(killSwitch <-chan bool, symbol *coinfactory.Symbol) {
+	log.Infof("Starting processor for %s kline stream", symbol.Symbol)
+	klineStream := symbol.GetKLineStream(killSwitch, "1m")
+
+	for {
+		// Bail on the kill switch
+		select {
+		case <-killSwitch:
+			return
+		default:
+		}
+
+		// Handle the data
+		select {
+		case data := <-klineStream:
+			log.WithFields(log.Fields{
+				"data": data,
+			}).Info("Kline for " + data.Symbol)
+
+		// Bail on the kill switch
+		case <-killSwitch:
+			return
+		}
 	}
 }

@@ -90,3 +90,34 @@ func buildSymbolCache(info ExchangeInfo) map[string]SymbolData {
 func setServerTimeDelta(info ExchangeInfo) {
 	serverTimeDelta = calculateServerTimeDelta(info.ServerTime)
 }
+
+func getSymbolsAsStrings() []string {
+	symbolStrings := []string{}
+	symbols := GetSymbols()
+
+	for s := range symbols {
+		symbolStrings = append(symbolStrings, s)
+	}
+
+	return symbolStrings
+}
+
+func placeOrderGetResult(order OrderRequest) (OrderResponseResultResponse, error) {
+	var response OrderResponseResultResponse
+	err := placeOrder(order, &response)
+	if err != nil {
+		return OrderResponseResultResponse{}, err
+	}
+	return response, nil
+}
+
+func placeOrderGetAck(order OrderRequest) (OrderResponseAckResponse, error) {
+	var response OrderResponseAckResponse
+	// Make sure response type is ack
+	order.ResponseType = "ACK"
+	err := placeOrder(order, &response)
+	if err != nil {
+		return OrderResponseAckResponse{}, err
+	}
+	return response, nil
+}

@@ -22,7 +22,7 @@ type OrderService interface {
 	AttemptTestOrder(req OrderRequest) error
 	CancelOrder(order *Order) error
 	GetOpenOrders(symbol string) ([]*Order, error)
-	GetOrder(symbol string, orderId int) (*Order, error)
+	GetOrder(symbol string, orderID int) (*Order, error)
 }
 
 type orderService struct {

@@ -72,9 +72,9 @@ func (os *orderService) AttemptOrder(order OrderRequest) (*Order, error) {
 	var err error
 
 	if order.Side == "BUY" {
-		err = localBalanceManagerInstance.freezeAmount(symbol.QuoteAsset, order.Price.Mul(order.Quantity))
+		err = getBalanceManager().freezeAmount(symbol.QuoteAsset, order.Price.Mul(order.Quantity))
 	} else {
-		err = localBalanceManagerInstance.freezeAmount(symbol.BaseAsset, order.Quantity)
+		err = getBalanceManager().freezeAmount(symbol.BaseAsset, order.Quantity)
 	}
 
 	if err != nil {

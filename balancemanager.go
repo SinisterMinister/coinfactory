@@ -22,17 +22,11 @@ type BalanceManager interface {
 	SubReservedBalance(asset string, amount decimal.Decimal)
 }
 
-type balanceManagerStreamProcessor struct{}
-
-func (b *balanceManagerStreamProcessor) ProcessUserData(data binance.UserDataPayload) {
-	if data.AccountUpdatePayload.EventTime != 0 {
-		localBalanceManagerInstance.handleUserDataStream(data.AccountUpdatePayload)
-	}
-}
-
 type balanceManager struct {
 	wallets        map[string]*walletWrapper
 	loggerStopChan chan bool
+	updateStopChan chan bool
+	updateMutex    *sync.Mutex
 }
 
 type walletWrapper struct {
@@ -47,19 +41,16 @@ type InsufficientFundsError struct {
 
 func (e InsufficientFundsError) Error() string { return e.msg }
 
-var balanceManagerInstance BalanceManager
-var localBalanceManagerInstance *balanceManager
+var balanceManagerInstance *balanceManager
 var balanceManagerOnce sync.Once
 var walletMux = &sync.Mutex{}
 
-func getBalanceManagerInstance() BalanceManager {
+func getBalanceManager() *balanceManager {
 	balanceManagerOnce.Do(func() {
-		i := &balanceManager{map[string]*walletWrapper{}, nil}
+		i := &balanceManager{map[string]*walletWrapper{}, nil, nil, &sync.Mutex{}}
 		balanceManagerInstance = i
-		localBalanceManagerInstance = i
 		i.init()
 	})
-
 	return balanceManagerInstance
 }
 
@@ -82,7 +73,19 @@ func (bm *balanceManager) init() {
 	bm.loggerStopChan = make(chan bool)
 	go bm.logBalances(bm.loggerStopChan)
 	// Setup user data stream processor to handle balance managing
-	getUserDataStreamHandlerInstance().registerProcessor("coinfactory.balancemanagerprocessor", &balanceManagerStreamProcessor{})
+	go bm.handleUserDataStream(bm.updateStopChan)
+}
+
+func (bm *balanceManager) start() {
+	// NOOP
+}
+
+func (bm *balanceManager) stop() {
+	bm.updateMutex.Lock()
+	defer bm.updateMutex.Unlock()
+
+	close(bm.updateStopChan)
+	bm.updateStopChan = make(chan bool)
 }
 
 func (bm *balanceManager) logBalances(done chan bool) {
@@ -245,13 +248,27 @@ func (bm *balanceManager) getWallet(asset string) *walletWrapper {
 	return w
 }
 
-func (bm *balanceManager) handleUserDataStream(payload binance.AccountUpdatePayload) {
-	// Update the wallet balances
-	for _, sw := range payload.Balances {
-		w := bm.getWallet(sw.Asset)
-		w.mux.Lock()
-		w.Free = sw.Free
-		w.Locked = sw.Locked
-		w.mux.Unlock()
+func (bm *balanceManager) handleUserDataStream(stopChan <-chan bool) {
+	userDataStream := getUserDataStreamService().GetAccountUpdateStream(stopChan)
+	for {
+		select {
+		case <-stopChan:
+			return
+		default:
+		}
+
+		select {
+		case <-stopChan:
+			return
+		case payload := <-userDataStream:
+			// Update the wallet balances
+			for _, sw := range payload.Balances {
+				w := bm.getWallet(sw.Asset)
+				w.mux.Lock()
+				w.Free = sw.Free
+				w.Locked = sw.Locked
+				w.mux.Unlock()
+			}
+		}
 	}
 }

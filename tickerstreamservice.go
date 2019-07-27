@@ -26,7 +26,7 @@ var (
 )
 
 func getTickerStreamService() *tickerStreamService {
-	once.Do(func() {
+	tssOnce.Do(func() {
 		tickerStreamServiceInstance = &tickerStreamService{
 			&sync.Mutex{},
 			make(chan bool),

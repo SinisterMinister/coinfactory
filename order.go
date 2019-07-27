@@ -53,7 +53,7 @@ func (ob *orderBuilder) build() *Order {
 		ob.stopChan,
 	}
 
-	go order.orderStatusHandler()
+	go order.orderStatusHandler(order.stopChan)
 
 	return order
 }
@@ -83,9 +83,7 @@ func (o *Order) GetDoneChan() <-chan int {
 	return o.doneChan
 }
 
-func (order *Order) orderStatusHandler() {
-	// Get order update stream
-	stopChan := order.stopChan
+func (order *Order) orderStatusHandler(stopChan <-chan bool) {
 	orderStream := getUserDataStreamService().GetOrderUpdateStream(stopChan)
 
 	for {

@@ -44,7 +44,7 @@ func (kss *klineStreamService) getSymbolIntervals() []binance.KlineSymbolInterva
 
 	kss.streamsMutex.RLock()
 	for siRaw := range kss.streams {
-		si := strings.Split(siRaw, "_")
+		si := strings.Split(siRaw, "@kline_")
 		sis = append(sis, binance.KlineSymbolInterval{
 			Symbol:   si[0],
 			Interval: si[1],

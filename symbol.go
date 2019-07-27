@@ -1,6 +1,7 @@
 package coinfactory
 
 import (
+	"sync"
 	"time"
 
 	"github.com/VividCortex/ewma"
@@ -10,19 +11,32 @@ import (
 
 type Symbol struct {
 	binance.SymbolData
-	Ticker                 binance.SymbolTickerData
+	ticker                 binance.SymbolTickerData
 	trixKlineCache         []binance.Kline
 	trixKlineCacheInterval string
 	klineStreamStopChannel chan bool
+	tickerStreamStopChan   <-chan bool
+	tickerMutex            *sync.RWMutex
 }
 
-// func (s *Symbol) GetTickerStream() {}
+func newSymbol(data binance.SymbolData, stopChan <-chan bool) *Symbol {
+	symbol := &Symbol{
+		SymbolData:           data,
+		tickerMutex:          &sync.RWMutex{},
+		tickerStreamStopChan: stopChan,
+	}
 
-// func (s *Symbol) GetTradeStream() {}
+	go symbol.tickerUpdater()
+	return symbol
+}
 
-// func (s *Symbol) GetAggregateTradeStream() {}
+func (s *Symbol) GetTickerStream(stopChan <-chan bool) <-chan binance.SymbolTickerData {
+	return getTickerStreamService().GetTickerStream(stopChan, s.Symbol)
+}
 
-// func (s *Symbol) GetKLineStream(interval string) {}
+func (s *Symbol) GetKLineStream(stopChan <-chan bool, interval string) <-chan binance.KlineStreamData {
+	return getKlineStreamService().GetKlineStream(stopChan, s.Symbol, interval)
+}
 
 func (s *Symbol) GetKLines(interval string, start time.Time, end time.Time, limit int) ([]binance.Kline, error) {
 	req := binance.KlineRequest{
@@ -61,24 +75,24 @@ func (s *Symbol) updateTrixKlineCache(interval string, periods float64) (err err
 
 		// Start a stream to get updates
 		go func() {
-			stream := binance.GetKlineStream(s.klineStreamStopChannel, s.Symbol, interval)
+			stream := s.GetKLineStream(s.klineStreamStopChannel, interval)
 			for {
 				select {
 				case data := <-stream:
-					if data.KlineData.Closed {
+					if data.Closed {
 						// Build a Kline
 						kline := binance.Kline{
-							OpenTime:         time.Unix(0, data.KlineData.OpenTime*1000000),
-							CloseTime:        time.Unix(0, data.KlineData.CloseTime*1000000),
-							OpenPrice:        data.KlineData.OpenPrice,
-							ClosePrice:       data.KlineData.ClosePrice,
-							LowPrice:         data.KlineData.LowPrice,
-							HighPrice:        data.KlineData.HighPrice,
-							BaseVolume:       data.KlineData.BaseVolume,
-							QuoteVolume:      data.KlineData.QuoteVolume,
-							TradeCount:       data.KlineData.TradeCount,
-							TakerAssetVolume: data.KlineData.TakerAssetVolume,
-							TakerQuoteVolume: data.KlineData.TakerQuoteVolume,
+							OpenTime:         time.Unix(0, data.OpenTime*1000000),
+							CloseTime:        time.Unix(0, data.CloseTime*1000000),
+							OpenPrice:        data.OpenPrice,
+							ClosePrice:       data.ClosePrice,
+							LowPrice:         data.LowPrice,
+							HighPrice:        data.HighPrice,
+							BaseVolume:       data.BaseVolume,
+							QuoteVolume:      data.QuoteVolume,
+							TradeCount:       data.TradeCount,
+							TakerAssetVolume: data.TakerAssetVolume,
+							TakerQuoteVolume: data.TakerQuoteVolume,
 						}
 						s.trixKlineCache = append(s.trixKlineCache[1:], kline)
 						log.WithField("kline", kline).Debug("Updated Kline cache")
@@ -138,5 +152,28 @@ func (s *Symbol) GetCurrentTrixIndicator(interval string, periods float64) (ma f
 }
 
 func (s *Symbol) GetTicker() binance.SymbolTickerData {
-	return s.Ticker
+	s.tickerMutex.RLock()
+	defer s.tickerMutex.RUnlock()
+	return s.ticker
+}
+
+func (s *Symbol) tickerUpdater() {
+	tickerStream := getTickerStreamService().GetTickerStream(s.tickerStreamStopChan, s.Symbol)
+	for {
+		select {
+		case <-s.tickerStreamStopChan:
+			return
+		default:
+		}
+
+		select {
+		case <-s.tickerStreamStopChan:
+			return
+		case data := <-tickerStream:
+			s.tickerMutex.Lock()
+			s.ticker = data
+			s.tickerMutex.Unlock()
+
+		}
+	}
 }

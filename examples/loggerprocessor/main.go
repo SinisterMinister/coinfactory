@@ -21,7 +21,8 @@ func main() {
 	}
 
 	// Create a processor for each ticker and kline stream
-	for _, symbol := range markets {
+	for _, s := range markets {
+		symbol := coinfactory.GetSymbolService().GetSymbol(s)
 		go tickerProcessor(killSwitch, symbol)
 
 		// Log kline stream
@@ -46,9 +47,9 @@ func main() {
 	}
 }
 
-func tickerProcessor(killSwitch <-chan bool, symbol string) {
-	log.Infof("Starting processor for %s market", symbol)
-	tickerStream := coinfactory.GetTickerStreamService().GetTickerStream(killSwitch, symbol)
+func tickerProcessor(killSwitch <-chan bool, symbol *coinfactory.Symbol) {
+	log.Infof("Starting processor for %s market", symbol.Symbol)
+	tickerStream := symbol.GetTickerStream(killSwitch)
 
 	for {
 		// Bail on the kill switch
@@ -72,9 +73,9 @@ func tickerProcessor(killSwitch <-chan bool, symbol string) {
 	}
 }
 
-func klineProcessor(killSwitch <-chan bool, symbol string) {
-	log.Infof("Starting processor for %s kline stream", symbol)
-	klineStream := coinfactory.GetKlineStreamService().GetKlineStream(killSwitch, symbol, "1m")
+func klineProcessor(killSwitch <-chan bool, symbol *coinfactory.Symbol) {
+	log.Infof("Starting processor for %s kline stream", symbol.Symbol)
+	klineStream := symbol.GetKLineStream(killSwitch, "1m")
 
 	for {
 		// Bail on the kill switch

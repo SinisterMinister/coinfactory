@@ -19,14 +19,7 @@ func GetSymbols() map[string]SymbolData {
 }
 
 func GetSymbolsAsStrings() []string {
-	symbolStrings := []string{}
-	symbols := GetSymbols()
-
-	for s := range symbols {
-		symbolStrings = append(symbolStrings, s)
-	}
-
-	return symbolStrings
+	return getSymbolsAsStrings()
 }
 
 func GetSymbol(symbol string) SymbolData {
@@ -40,23 +33,11 @@ func PlaceTestOrder(order OrderRequest) error {
 }
 
 func PlaceOrderGetResult(order OrderRequest) (OrderResponseResultResponse, error) {
-	var response OrderResponseResultResponse
-	err := placeOrder(order, &response)
-	if err != nil {
-		return OrderResponseResultResponse{}, err
-	}
-	return response, nil
+	return placeOrderGetResult(order)
 }
 
 func PlaceOrderGetAck(order OrderRequest) (OrderResponseAckResponse, error) {
-	var response OrderResponseAckResponse
-	// Make sure response type is ack
-	order.ResponseType = "ACK"
-	err := placeOrder(order, &response)
-	if err != nil {
-		return OrderResponseAckResponse{}, err
-	}
-	return response, nil
+	return placeOrderGetAck(order)
 }
 
 func GetOrderStatus(order OrderStatusRequest) (OrderStatusResponse, error) {
@@ -107,6 +88,10 @@ func GetOpenOrders(request OpenOrdersRequest) ([]OrderStatusResponse, error) {
 	return getOpenOrders(request)
 }
 
-func GetKlineStream(stopChan <-chan bool, symbol string, interval string) <-chan KlineStreamPayload {
-	return getKlineStream(stopChan, symbol, interval)
+func GetKlineStream(stopChan <-chan bool, ksi KlineSymbolInterval) <-chan KlineStreamPayload {
+	return getKlineStream(stopChan, ksi)
+}
+
+func GetCombinedKlineStream(stopChan <-chan bool, ksis []KlineSymbolInterval) <-chan []KlineStreamPayload {
+	return getCombinedKlineStream(stopChan, ksis)
 }

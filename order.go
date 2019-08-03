@@ -14,7 +14,7 @@ type Order struct {
 	orderStatus       binance.OrderStatusResponse
 	orderCreationTime time.Time
 	orderID           int
-	mux               *sync.Mutex
+	orderMutex        *sync.Mutex
 	doneChan          chan int
 	stopChan          <-chan bool
 }
@@ -67,15 +67,15 @@ func newOrderBuilder(request OrderRequest, stopChan <-chan bool) *orderBuilder {
 
 // GetStatus
 func (o *Order) GetStatus() binance.OrderStatusResponse {
-	o.mux.Lock()
-	defer o.mux.Unlock()
+	o.orderMutex.Lock()
+	defer o.orderMutex.Unlock()
 	return o.orderStatus
 }
 
 // GetAge returns the age of the order
 func (o *Order) GetAge() time.Duration {
-	o.mux.Lock()
-	defer o.mux.Unlock()
+	o.orderMutex.Lock()
+	defer o.orderMutex.Unlock()
 	return time.Since(o.orderCreationTime)
 }
 
@@ -100,7 +100,7 @@ func (order *Order) orderStatusHandler(stopChan <-chan bool) {
 		case data := <-orderStream:
 			if data.OrderID == order.orderID {
 				log.Info("Updating order status")
-				order.mux.Lock()
+				order.orderMutex.Lock()
 				switch data.CurrentOrderStatus {
 				case "FILLED":
 					fallthrough
@@ -134,7 +134,7 @@ func (order *Order) orderStatusHandler(stopChan <-chan bool) {
 					data.IsWorking,
 				}
 				order.orderStatus = status
-				order.mux.Unlock()
+				order.orderMutex.Unlock()
 			}
 		}
 	}

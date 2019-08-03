@@ -1,6 +1,8 @@
 package coinfactory
 
-import "time"
+import (
+	"time"
+)
 
 const appName = "coinfactory"
 
@@ -10,6 +12,9 @@ func Start() {
 	go getKlineStreamService().start()
 	go getSymbolService().start()
 	go getBalanceManager().start()
+
+	// Let things get warmed up first
+	time.Sleep(5 * time.Second)
 }
 
 func Shutdown() {
@@ -19,7 +24,7 @@ func Shutdown() {
 	getSymbolService().stop()
 	getBalanceManager().stop()
 
-	// Let things get warmed up first
+	// Give things time to shutdown
 	time.Sleep(5 * time.Second)
 }
 

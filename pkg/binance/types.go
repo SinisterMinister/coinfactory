@@ -102,7 +102,7 @@ type SymbolTickerData struct {
 	WeightedAveragePrice decimal.Decimal `json:"w"`
 	PreviousClosePrice   decimal.Decimal `json:"x"`
 	CurrentClosePrice    decimal.Decimal `json:"c"`
-	CloseTradeQuantity   string          `json:"Q"`
+	CloseTradeQuantity   decimal.Decimal `json:"Q"`
 	BidPrice             decimal.Decimal `json:"b"`
 	BidQuantity          decimal.Decimal `json:"B"`
 	AskPrice             decimal.Decimal `json:"a"`

@@ -17,18 +17,19 @@ import (
 func openSocket(path string, query map[string]string) *websocket.Conn {
 	// TODO: Fix this naive impl with something robust that can handle connection drops
 	u := url.URL{Scheme: "wss", Host: viper.GetString("binance.stream_host") + ":" + viper.GetString("binance.stream_port"), Path: path}
-	q := u.Query()
 	for k, v := range query {
-		q.Add(k, v)
+		if u.RawQuery != "" {
+			u.RawQuery = u.RawQuery + "&"
+		}
+		u.RawQuery = u.RawQuery + k + "=" + v
 	}
-	u.RawQuery = q.Encode()
 	log.Debug("Opening socket connection to ", u.String())
 
 	connection, resp, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
-		bodyBytes, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			log.WithError(err).Fatal("dial:", err)
+		bodyBytes, err2 := ioutil.ReadAll(resp.Body)
+		if err2 != nil {
+			log.WithError(err2).Fatal("dial:", err2)
 			return nil
 		}
 		bodyString := string(bodyBytes)

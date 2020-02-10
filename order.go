@@ -17,6 +17,7 @@ type Order struct {
 	orderMutex        *sync.Mutex
 	doneChan          chan int
 	stopChan          <-chan bool
+	updateChannels    []chan bool
 }
 
 type orderBuilder struct {
@@ -51,6 +52,7 @@ func (ob *orderBuilder) build() *Order {
 		&sync.Mutex{},
 		make(chan int),
 		ob.stopChan,
+		[]chan bool{},
 	}
 
 	go order.orderStatusHandler(order.stopChan)
@@ -79,8 +81,26 @@ func (o *Order) GetAge() time.Duration {
 	return time.Since(o.orderCreationTime)
 }
 
+func (o *Order) GetCreationTime() time.Time {
+	o.orderMutex.Lock()
+	defer o.orderMutex.Unlock()
+	return o.orderCreationTime
+}
+
 func (o *Order) GetDoneChan() <-chan int {
 	return o.doneChan
+}
+
+func (o *Order) GetUpdateChan() <-chan bool {
+
+	ch := make(chan bool)
+
+	// Add the channel to registry
+	o.orderMutex.Lock()
+	o.updateChannels = append(o.updateChannels, ch)
+	o.orderMutex.Unlock()
+
+	return ch
 }
 
 func (order *Order) orderStatusHandler(stopChan <-chan bool) {
@@ -134,6 +154,17 @@ func (order *Order) orderStatusHandler(stopChan <-chan bool) {
 					data.IsWorking,
 				}
 				order.orderStatus = status
+
+				// Let all the channels know
+				for _, ch := range order.updateChannels {
+					select {
+					case ch <- true:
+						// Let the channel know that the order was updated
+					default:
+						// Skip blocked channel
+						log.Warn("skipping blocked order status channel")
+					}
+				}
 				order.orderMutex.Unlock()
 			}
 		}

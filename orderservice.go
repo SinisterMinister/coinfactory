@@ -11,6 +11,7 @@ import (
 
 // OrderRequest contains the information required to place an order through the API
 type OrderRequest struct {
+	Type     string          `json:type`
 	Symbol   string          `json:"symbol"`
 	Side     string          `json:"side"`
 	Quantity decimal.Decimal `json:"qty"`
@@ -52,6 +53,9 @@ func getOrderService() *orderService {
 }
 
 func (os *orderService) AttemptOrder(order OrderRequest) (*Order, error) {
+	if order.Type == "" {
+		order.Type = "LIMIT"
+	}
 	req := binance.OrderRequest{
 		Symbol:      order.Symbol,
 		Side:        order.Side,
